@@ -59,8 +59,7 @@ hosted at https://www.cs.cmu.edu/~csd-phd-blog/
    Program Manager. A blank version of this form can be found at the
    root of the blog repository as `WritingSkillsApprovalForm.pdf`.
 
-10. Update the date on your pull to match the date of the last approver signature.
-    This is the date that is entered into DSR as the official completion date for the Skill.
+10. Update the date to match the date of the last approver signature. This is the date that is entered into DSR as the official completion date for the Skill.
    
 12. Commit your changes to your fork of the repository (`git add
     content/YEAR/BLOGPOSTNAME.md`, `git add
