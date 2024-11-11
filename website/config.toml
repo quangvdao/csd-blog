@@ -1,5 +1,5 @@
 # Basic configuration
-base_url = "https://www.cs.cmu.edu/~csd-phd-blog/"
+base_url = "https://www.cs.cmu.edu/~csd-phd-blog"
 title = "CMU CSD PhD Blog"
 description = ""
 default_language = "en"
@@ -18,7 +18,9 @@ compile_sass = true
 build_search_index = true
 
 # Generate an Atom 1.0 feed
-generate_feed = true
+generate_feeds = true
+
+feed_filenames = ["rss.xml"]
 
 [markdown]
 extra_syntaxes = ["syntaxes"]
@@ -45,7 +47,7 @@ even_menu = [
     {url = "$BASE_URL/", name = "Home"},
     {url = "$BASE_URL/areas", name = "Areas"},
     {url = "$BASE_URL/tags", name = "Tags"},
-    {url = "$BASE_URL/atom.xml", name = "RSS Feed"},
+    {url = "$BASE_URL/rss.xml", name = "RSS Feed"},
 ]
 
 # TODO: Scrape all faculty URLs and add them here
