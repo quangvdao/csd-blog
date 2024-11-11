@@ -1,6 +1,6 @@
 #! /bin/sh
 
-git checkout "zola-upgrade" || exit 1
+git checkout "main" || exit 1
 git pull || exit 2
 
 cd website/ || exit 255
