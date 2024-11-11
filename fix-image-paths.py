@@ -8,7 +8,7 @@
 # the blog itself, but is needed for the poor RSS implementation (don't ask) on the TVs
 # up around the CSD spaces that periodocally display blog content.
 
-# needs to be passed the pth to an index file relative to the website directory
+# needs to be passed the path to an index file relative to the website directory
 
 from bs4 import BeautifulSoup
 import re
@@ -26,7 +26,7 @@ with open(f) as fin:
         if not img['src'].startswith('https'):
             if img['src'].startswith('./'):
                 img['src'] = img['src'][2:]
-            img['src'] = f'https://skycat.com/zola/{subdir}/{img["src"]}'
+            img['src'] = f'https://www.cs.cmu.edu/~csd-phd-blog/{subdir}/{img["src"]}'
 
     with open(f, "wb") as fout:
         fout.write(soup.prettify("utf-8"))
