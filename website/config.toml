@@ -42,12 +42,14 @@ katex_enable = true
 katex_auto_render = true
 
 # Setup things for the "Even" theme we use
-even_title = "CMU CSD PhD Blog"
+csd_logo = "/csd.svg"
+even_title = "CSD PhD Blog"
 even_menu = [
     {url = "$BASE_URL/", name = "Home"},
     {url = "$BASE_URL/areas", name = "Areas"},
     {url = "$BASE_URL/tags", name = "Tags"},
-    {url = "$BASE_URL/rss.xml", name = "RSS Feed"},
+    {url = "$BASE_URL/rss.xml", name = "RSS"},
+    {url = "https://csd.cmu.edu", name = "CSD"},
 ]
 
 # TODO: Scrape all faculty URLs and add them here

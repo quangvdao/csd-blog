@@ -1,47 +1,59 @@
 @use "variables";
 @use "animations";
 #header {
-  padding: 20px;
-  display: flex;
-  justify-content: space-between;
+    padding: 20px 5px 5px;
 
-  .logo {
-    font-family: "PT Sans", Helvetica, Arial, sans-serif;
-    font-weight: 400;
+    .logo {
+        border-bottom: solid 2px variables.$main-colour;
+        display: flex;
+        justify-content: space-between;
 
-    a {
-      color: #34495e;
-      font-size: 48px;
-    }
-  }
-
-  .menu {
-    align-self: flex-start;
-    font-family: variables.$decoration-font-family;
-
-    ul {
-      display: inline-block;
-      padding-right: 25px;
-
-      li {
-        display: inline-block;
-        margin-right: 5px;
-        @include animations.underline-from-center;
-
-        a {
-          color: #34495e;
-          font-size: 18px;
+        img {
+            width: 350px;
         }
-      }
+
+        .logo-text {
+            font-family: "PT Sans", Helvetica, Arial, sans-serif;
+            font-weight: 400;
+
+            a {
+                color: #34495e;
+                font-size: 32px;
+            }
+        }
     }
-  }
+
+    .menu {
+        padding-left: 0;
+        align-self: flex-start;
+        font-family: variables.$decoration-font-family;
+
+        ul {
+            display: inline-block;
+            margin-top: 0;
+            padding-left: 0;
+
+            li {
+                display: inline-block;
+                margin-right: 5px;
+                @include animations.underline-from-center;
+
+                a {
+                    color: #34495e;
+                    font-size: 22px;
+                }
+            }
+        }
+    }
 }
+
 @include variables.max-screen() {
-  #header {
-    .logo, .menu {
-      display: none;
+    #header {
+        .logo, .menu {
+            display: none;
+        }
+
+        padding: 50px 0 0;
+        text-align: center;
     }
-    padding: 50px 0 0;
-    text-align: center;
-  }
 }

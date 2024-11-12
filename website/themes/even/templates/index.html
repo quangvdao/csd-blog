@@ -89,14 +89,23 @@
             </nav>
 
             <header id="header">
-                <div class="logo"><a href="{{ config.base_url }}">{{ config.extra.even_title }}</a></div>
+                <div class="logo">
+                    <img src="{{config.extra.csd_logo}}" alt="CSD Logo">
+                    <div class="logo-text">
+                        <a href="{{ config.base_url }}">{{ config.extra.even_title }}</a>
+                    </div>
+                </div>
                 <nav class="menu">
                     <ul>
                         {% for item in config.extra.even_menu %}
                             <li>
-                                <a href="{{ item.url | replace(from="$BASE_URL", to=config.base_url) }}">
-                                    {{ item.name }}
-                                </a>
+                                {% if item.name == "CSD" %}
+                                    <a href="{{ item.url }}" target="_blank">{{ item.name }}</a>
+                                {% else %}
+                                    <a href="{{ item.url | replace(from="$BASE_URL", to=config.base_url) }}">
+                                        {{ item.name }}
+                                    </a>
+                                {% endif %}
                             </li>
                         {% endfor %}
                     </ul>
