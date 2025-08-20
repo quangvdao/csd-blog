@@ -3,7 +3,7 @@ title = "Prudentia: Are Your Favorite Online Services Playing Fair?"
 date = 2025-08-20
 
 [taxonomies]
-areas = ["Networking", "Systems"]
+areas = ["Systems"]
 tags = ["fairness", "networking", "congestion control", "internet", "measurement"]
 
 [extra]
