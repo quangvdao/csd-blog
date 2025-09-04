@@ -6,7 +6,7 @@ date = 2025-09-25
 
 [taxonomies]
 # Keep any areas that apply, removing ones that don't. Do not add new areas!
-areas = ["Cryptography", "Theory"]
+areas = ["Security", "Theory"]
 # Tags can be set to a collection of a few keywords specific to your blogpost.
 # Consider these similar to keywords specified for a research paper.
 tags = [
@@ -48,11 +48,13 @@ Describe how various computational claims can be encoded in sum-check format.
 1. Linear-time, linear-space algorithm
 2. Quasilinear-time, logarithmic-space algorithm
 
-# New Techniques for Sum-Check Proving
+# New Technique for Sum-Check Proving: Round-batching
 
 O(N (\log \log N + k)) time, O(N^{1/k}) space algorithm
 
-# Algorithms in specific settings
+# Experimental Results
+
+# Extensions
 
 Small-value sum-check proving
 
