@@ -95,13 +95,37 @@ What they are: multivariate polynomial where each variable is of degree at most 
 
 In general, $n$ variables give $2^n$ coefficients. In fact, it is more convenient to think of these vectors as representing the _evaluations_ of the polynomial at some interpolating set, say the _Boolean hypercube_ $\{0,1\}^n$[^1]
 
+What is an interpolating set? This is just another word for ``basis'', namely that 
+
+This leads us to the \emph{multilinear extension} formula:
+\[ \widetilde{p}(X_1,\dots, X_n) = \sum_{y \in \{0,1\}^n} \widetilde{eq}(\vec{X}, y) \cdot p(y),\]
+with equality polynomial chosen for being the basis of this evaluation domain
+\[\widetilde{eq}(\vec{X}, \vec{Y}) = \prod_{i=1}^n ((1-X_i) \cdot (1-Y_i) + X_i \cdot Y_i),\]
+which satisfy the condition that for $\vec{x}, \vec{y} \in \{0,1\}^n$, $\widetilde{eq}(x, y) = (x \overset{?}{=} y) \in \{0,1\}$.
+
 ## Existing Algorithms for Sum-Check
 
 Special focus: sum-check over low-degree functions applied to a number of multilinear polynomials
 
-Why? captures known applications. Example: a zero-check of quadratic constraints
+Why? captures known applications. Example: a zero-check of quadratic constraints.
 
-Linear-time algorithm (in the number of terms):
+In fact, let's just focus on a single case: a product of two multilinear polynomials:
+
+\[
+    \sum_{x \in \{0,1\}^n} p(x) * q(x) = c.
+]
+
+We assume $p$ and $q$ are given by their evaluations on $\{0,1\}^n$.
+
+### Linear-time algorithm
+
+This first algorithm is due to vsbw13 and thaler13 (add refs to cites)
+
+Compute $s_1(X)$ from its evaluations at $0, 1, 2$ (degree-2 requires 3 evaluations) via summing over ...
+
+Then compute the bound polynomials $p, q$ at $r_1$, and recurse.
+
+Complexity analysis: $O(2^n)$ time and $O(2^n)$ space
 
 Problem: requires linear space as well. Quickly grows untenable as the number of terms grow
 (cannot prove billion-sized statements)
@@ -109,9 +133,13 @@ Problem: requires linear space as well. Quickly grows untenable as the number of
 assume the trace still fits in memory (which is the case when proving up to one hundred million
 RISC-V cycles). however, there won't be enough space to store the evaluations as in the linear-time algorithm
 
-Log-space / streaming algorithm: . Note the model: assume there is enough storage (perhaps in a hard
+### Log-space / streaming algorithm
+
+Note the model: assume there is enough storage (perhaps in a hard
 drive) to store all the coefficients, but not enough storage in RAM to store the intermediate
-values. So, we can compute from scratch every round, or at least until there is enough space to
+values.
+
+So, we can compute from scratch every round, or at least until there is enough space to
 materialize the polynomial
 
 ## New Idea: Round Compression and its Benefits
