@@ -27,21 +27,16 @@ committee = [
 ]
 +++
 
+<!-- Notes:
+1. This is for a general CS audience, not cryptography experts
+2. Word count should be around 2-3k words, but not a strict limit
+3. Everything should be understandable, well motivated, details laid out clearly -->
+
 # The Need for Verifiability
 
-We increasingly rely on results produced by computer systems that we cannot feasibly re‑run or fully
-inspect. For instance, many policy decisions are based on studies involving datasets that can be
-massive, or must be kept private due to legal constraints, such as health data. How can we trust
-that such analyses have been done correctly?
+We increasingly rely on computational results we cannot feasibly verify ourselves. The barrier to verification comes in two forms. First, the computation may involve private data that cannot be shared, such as financial audits, medical studies, and proprietary algorithms. Second, even when data is public, re-executing the computation may be prohibitively expensive: large scientific analyses might require days of cluster time on terabytes of data. How can we trust that such computations were performed correctly?
 
-Cryptographic proof systems solve this dilemma. These are protocols that allow an untrusted party,
-the prover, who possess some private data, to convince another party, the verifier, that said data
-is compatible with some public information. Some simple examples of this include proving that you
-are above 18, or that you have enough money in your bank account for a loan.
-
-The key properties that make these proofs desirable are three-fold. First, they are
-_non-interactive_ and _publicly verifiable_, meaing that ... Second, they are _succinct_, meaning
-that XXX, and third, they are _zero-knowledge_, meaning that YYY.
+Cryptographic proof systems solve this dilemma. Such protocols let an untrusted prover, who possesses some private data, convince a verifier that the data satisfies a public property. For example, this could include proving that you are over 18 or that your account has sufficient balance, without revealing anything else such as your full date of birth, or your financial history. Furthermore, the proofs or certificates produced by such systems are relative short, and can be verified in a matter of milliseconds, rather than the days or weeks required to re-execute the computation.
 
 Long in the realm of theory, cryptographic proof systems are now practical enough to be deployed for
 a number of applications, most notably in the context of making blockchains scalable and private. A
@@ -50,7 +45,7 @@ virtual machine (zkVM)_. Think of it like a virtual computer that allows one to 
 program (as long as they are compiled to a common ISA like RISC-V), and then produce a certificate
 that the program was run correctly on any given input, producing the claimed output.
 
-This blog post is a glimpse into these exciting developments. In particular, we 
+This blog post is a glimpse into these exciting developments. It turns out that the fastest of such zkVMs, such as Jolt, derive its efficiency from a classical protocol first introduced in 1992, called the sum-check protocol. I will give an introduction to the sum-check protocol, detail well-known algorithms for the sum-check prover, and introduce a new technique that speeds up the sum-check prover in settings relevant to zkVMs.
 
 <!-- Add new writeup above, don't modify the draft below 
 
@@ -199,9 +194,21 @@ This looks like a mouthful, but it actually gives us a nice algorithm to compute
 = 0, 1, 2$ via a single pass over the stream of evaluations of $p$ and $q$. We stream, chunk by
 $2^{i-1}$ terms, then sum again over those chunked terms. (TODO: write this out more clearly)
 
-## New Idea: Round Compression and its Benefits
+## New Idea: Delayed Binding and its Benefits
 
+The standard sum-check prover binds one variable per round to a random challenge from a large field. This makes the first round cheap (inputs are still “small,” e.g., 64-bit), but after that, the prover’s arithmetic immediately moves into the large field, which is much slower.
 
+Our idea is simple: delay binding for a short “window” of rounds. Instead of committing to the verifier’s challenges right away, we treat the next w variables symbolically and precompute just enough to answer those w rounds in one go.
+
+What does that buy us?
+
+- Small-value speedup: In many real systems (like zkVMs), the underlying data are machine-word integers, while the proof system uses a 256-bit field. By batching the first few rounds, we can keep most of the heavy lifting in fast, native arithmetic. We only “pay” the big-field cost when we finally bind the window to the verifier’s challenges.
+
+- Better streaming: If memory is tight, we reuse the same windowing trick across multiple passes. Each pass materializes the evaluations we need for its window, answers those rounds, and moves on. With the right schedule—small windows early, larger windows later—we reduce the prover’s dependence on the polynomial degree from O(d^2) to O(d log d), while staying within a sublinear memory budget.
+
+Intuitively, batching trades a bit of extra precomputation for avoiding many slow multiplications after the first round. The window size w is a knob: too small and we leave performance on the table; too large and we overcompute. In practice, a short window already makes the first (most expensive) rounds dramatically cheaper, and a growing window schedule gives a strictly better streaming prover.
+
+Takeaway: by grouping rounds and binding challenges later, we keep the prover in its “fast lane” longer and shrink the overall runtime—both in the common small-value case and in streaming regimes.
 
 ## Conclusion
 
