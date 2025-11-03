@@ -2,7 +2,7 @@
 # The title of your blogpost. No sub-titles are allowed, nor are line-breaks.
 title = "Algorithms for the Sum-check Protocol"
 # Date must be written in YYYY-MM-DD format. This should be updated right before the final PR is made.
-date = 2025-10-27
+date = 2025-11-03
 
 [taxonomies]
 # Keep any areas that apply, removing ones that don't. Do not add new areas!
@@ -21,18 +21,56 @@ tags = [
 author = {name = "Quang Dao", url = "https://quangvdao.github.io/" }
 # The committee specification is a list of objects similar to the author.
 committee = [
-    {name = "Bryan Parno", url = "https://www.andrew.cmu.edu/user/bparno/"},
     {name = "Elaine Shi", url = "https://elaineshi.com/"},
+    {name = "Sarah Scheffler", url = "https://www.sarahscheffler.net/"},
     {name = "Harrison Grodin", url = "https://www.harrisongrodin.com/"}
 ]
 +++
 
 # The Need for Verifiability
 
-Modern computing systems produce enormous amounts of data and perform immense quantity of
-computation, but with almost no verifiability (even when we need them).
+We increasingly rely on results produced by computer systems that we cannot feasibly re‑run or fully
+inspect. For instance, many policy decisions are based on studies involving datasets that can be
+massive, or must be kept private due to legal constraints, such as health data. How can we trust
+that such analyses have been done correctly?
 
-Many important problems that we are facing today are related to 
+Cryptographic proof systems solve this dilemma. These are protocols that allow an untrusted party,
+the prover, who possess some private data, to convince another party, the verifier, that said data
+is compatible with some public information. Some simple examples of this include proving that you
+are above 18, or that you have enough money in your bank account for a loan.
+
+The key properties that make these proofs desirable are three-fold. First, they are
+_non-interactive_ and _publicly verifiable_, meaing that ... Second, they are _succinct_, meaning
+that XXX, and third, they are _zero-knowledge_, meaning that YYY.
+
+Long in the realm of theory, cryptographic proof systems are now practical enough to be deployed for
+a number of applications, most notably in the context of making blockchains scalable and private. A
+number of teams are racing to build the most generic proof systems possible - a _zero-knowledge
+virtual machine (zkVM)_. Think of it like a virtual computer that allows one to run any computer
+program (as long as they are compiled to a common ISA like RISC-V), and then produce a certificate
+that the program was run correctly on any given input, producing the claimed output.
+
+This blog post is a glimpse into these exciting developments. In particular, we 
+
+<!-- Add new writeup above, don't modify the draft below 
+
+Datasets are massive, compute is outsourced, and privacy and legal constraints often prevent direct access to inputs. Yet downstream decisions (scientific claims, safety checks, financial outcomes) depend on trusting these results.
+
+Consider two familiar scenarios. First, a scientist publishes an analysis derived from a private dataset: can peers trust the reported statistic without gaining access to the raw data or reproducing the full pipeline?
+
+Second, a distributed ledger processes a long sequence of state updates: can participants validate that the rules were followed without everyone re‑executing the entire computation?
+
+The default approach—to see all inputs and re‑execute the computation—is often impossible at modern scales. This raises a sharper question: can we verify correctness without re‑running the computation or revealing all of its inputs?
+
+Cryptographic proof systems change the interface. Instead of replaying the whole program, a prover supplies a short proof that a verifier can check quickly. If the proof verifies, the verifier gains high confidence that the claimed computation is correct—without re‑execution and without learning the hidden inputs.
+
+Why does this help so broadly? Because many computations reduce to “sum a structured function over many inputs.” The sum‑check protocol is a workhorse for certifying such sums. In a few interactive steps, it lets a prover convince a verifier that a very large sum (even over an exponentially large domain) has a particular value, by checking only a handful of low‑degree consistency conditions. Think of certifying an aggregate like a histogram total or a loss summed over 2^m configurations—without enumerating them.
+
+This capability underlies practical systems such as zk virtual machines (zkVMs), which let you take an arbitrary program and produce a succinct proof that it executed correctly on some (possibly private) input.
+ -->
+
+<!-- Modern computing systems produce enormous amounts of data and perform immense quantity of
+computation, but with almost no verifiability (even when we need them).
 
 Two examples:
 
@@ -48,11 +86,14 @@ knowing all the inputs to the computation?
 
 The sum-check protocol, introduced by Lund, Fortnow, Karloff, and Nisan in 1992 [[1]](#ref-1), is 
 
-sum-check is now at the core of state-of-the-art polynomial commitment schemes (WHIR, Basefold, FRI-Binius), folding schemes (HyperNova, LatticeFold(+)), and zero-knowledge virtual machine such as Jolt. For the last one
+sum-check is now at the core of state-of-the-art polynomial commitment schemes (WHIR, Basefold, FRI-Binius), folding schemes (HyperNova, LatticeFold(+)), and zero-knowledge virtual machine such as Jolt. For the last one -->
 
 ## Overview of the Sum-Check Protocol
 
-We work over a finite field $\mathbb{F}$. The setting of sum-check is that there is a multivariate polynomial $p(X_1, \dots, X_n) \in \mathbb{F}[X_1,\dots, X_n]$, of degree bounded by $d$ in each variable, and that the prover wants to convince the verifier that
+We work over a finite field $\mathbb{F}$. The setting of sum-check is that there is a multivariate
+polynomial $p(X_1, \dots, X_n) \in \mathbb{F}[X_1,\dots, X_n]$, of degree bounded by $d$ in each
+variable, and that the prover wants to convince the verifier that
+
 \[
     \sum_{(x_1,\dots,x_n) \in \{0,1\}^n} p(x_1,\dots,x_n) = c,    
 \]
@@ -64,11 +105,17 @@ $O(2^n)$. The key idea of sum-check is that by leveraging interaction with an un
 may supply the verifier with additional ``auxiliary'' data, it may reduce the work of checking the
 original claim, to checking a claim about the polynomial $p$ at a \emph{single} point.
 
-In particular, the data that the prover will send are "one-dimensional" slices of this multivariate polynomial. In the first round, the prover would send the univariate polynomial
+In particular, the data that the prover will send are "one-dimensional" slices of this multivariate
+polynomial. In the first round, the prover would send the univariate polynomial
+
 \[
     s_1(X) = \sum_{(x_2,\dots,x_n) \in \{0,1\}^{n-1}} p(X, x_2,\dots,x_n).
 \]
-If the original claim was correct, then $s_1(X)$ would have its degree bounded by $d$, and that $s_1(0) + s_1(1) = c$. The verifier checks precisely these two properties, then samples a random challenge $r_1 \gets \mathbb{F}$ from the finite field, and sends it to the prover. The point of this challenge is to enforce honesty from the prover 
+
+If the original claim was correct, then $s_1(X)$ would have its degree bounded by $d$, and that
+$s_1(0) + s_1(1) = c$. The verifier checks precisely these two properties, then samples a random
+challenge $r_1 \gets \mathbb{F}$ from the finite field, and sends it to the prover. The point of
+this challenge is to enforce honesty from the prover 
 
 After one round of interaction, the prover and verifier has effectively reduced the problem to showing that
 \[
@@ -136,13 +183,24 @@ RISC-V cycles). however, there won't be enough space to store the evaluations as
 ### Log-space / streaming algorithm
 
 Note the model: assume there is enough storage (perhaps in a hard
-drive) to store all the coefficients, but not enough storage in RAM to store the intermediate
-values.
+drive) to store all the evaluations, but not enough storage in RAM to store the intermediate
+values. Alternatively, the evaluations can be generated cheaply on-the-fly, but not enough storage (RAM or otherwise) for the bound evaluations.
 
 So, we can compute from scratch every round, or at least until there is enough space to
 materialize the polynomial
 
+Indeed, we can compute from the initial evaluations since
+\[
+    s_i(X) = \sum_{\vec{x'} \in \{0,1\}^{n - i - 1}} p(r_1, \dots, r_{i-1}, X, \vec{x'}) \cdot q(r_1, \dots, r_{i-1}, X, \vec{x'}) \\
+    = \sum_{(x_{i+1},\dots,x_n) \in \{0,1\}^{n - i - 1}} (\sum_{(y_1,\dots,y_{i-1})} \widetilde{eq}(\vec{r}, \vec{y}) \cdot p(\vec{y}, X, \vec{x'})) \cdot (\sum_{(y_1,\dots,y_{i-1})} \widetilde{eq}(\vec{r}, \vec{y}) \cdot q(\vec{y}, X, \vec{x'})).
+\]
+
+This looks like a mouthful, but it actually gives us a nice algorithm to compute $s_i(u)$ for all $u
+= 0, 1, 2$ via a single pass over the stream of evaluations of $p$ and $q$. We stream, chunk by
+$2^{i-1}$ terms, then sum again over those chunked terms. (TODO: write this out more clearly)
+
 ## New Idea: Round Compression and its Benefits
+
 
 
 ## Conclusion
@@ -172,12 +230,6 @@ Citations:
 
 
 <!-- AI generated content starts here, all commented out
-
-### **1. Introduction: The Problem of Verifiable Computation**
-
-Imagine a junior engineer is tasked with a massive, week-long computation—say, training a complex machine learning model on a colossal dataset. At the end of the week, they report a final result: "The model's accuracy is 87.4%." A senior engineer needs to sign off on this, but they don't have another week to spare to re-run the entire job. How can they efficiently verify the junior engineer's claim without redoing all the work?
-
-This is a classic problem in computer science, known as **verifiable computation**. How can a computationally weak party (the "Verifier") check the work of a powerful but potentially untrusted or buggy party (the "Prover")? The answer lies in a powerful cryptographic tool called an **Interactive Proof**. In an interactive proof, the Prover doesn't just provide the final answer; they engage in a short conversation with the Verifier, providing extra information that convinces the Verifier of the answer's correctness. The sum-check protocol is one of the most fundamental and elegant interactive proofs in this domain.
 
 ### **2. Background: The Magic of Multilinear Polynomials**
 
@@ -246,21 +298,5 @@ Our recent work introduces **round-batching**, a technique that provides a much 
 
 *   **Benefit 2: A Better Streaming Algorithm**
     *   By applying round-batching iteratively with a clever schedule (small windows early, large windows late), we can create a superior streaming algorithm. This evaluation-basis approach improves the time complexity's dependence on the polynomial degree $d$ from $O(d^2)$ to $O(d \log d)$, a significant asymptotic and practical improvement for the high-degree polynomials common in modern proof systems.
-
-### **7. Auxiliary Optimizations for Provers**
-
-Beyond round-batching, further optimizations are crucial for state-of-the-art provers.
-
-*   **High-Degree Sum-Checks:**
-    *   Often, the polynomial $g$ is a product of many factors, $g = \prod_{k=1}^d p_k$. Naively computing this product takes $d-1$ multiplications for each point.
-    *   **Optimization:** A recursive, tree-based multiplication structure (similar to Toom-Cook algorithm) can reduce the number of multiplications from $O(d)$ to $O(\log d)$ per point, offering a significant speedup for high-degree checks.
-
-*   **Decomposable Polynomials (e.g., Equality Check):**
-    *   Sometimes, a factor in the product is highly structured. A prime example is the equality polynomial, `eq(a, b)`, which checks if two vectors of variables `a` and `b` are identical.
-    *   **Optimization:** The `eq` polynomial is decomposable, meaning it can be expressed as a product of smaller, independent factors: `eq((a_1, ..., a_k), (b_1, ..., b_k)) = \prod_{i=1}^k (a_i b_i + (1-a_i)(1-b_i))`. This structure can be exploited to evaluate and sum it much more efficiently than a generic, opaque polynomial of the same degree. Provers that can detect and leverage this are significantly faster for workloads like zkEVM execution traces.
-
-### **8. Conclusion**
-
-The sum-check protocol is a cornerstone of modern cryptography, but its practical efficiency has long been limited by the prover's cost. Classical algorithms force an unforgiving choice between speed and memory. Our new round-batching technique provides a unifying framework that attacks this tradeoff from both sides, offering huge practical speedups for high-memory provers via small-value optimizations, and better asymptotic performance for memory-constrained streaming provers. When combined with auxiliary optimizations for high-degree and structured polynomials, these advances pave the way for faster, more scalable, and more practical proof systems.
 
  -->
