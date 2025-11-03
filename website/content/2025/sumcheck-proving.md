@@ -38,50 +38,9 @@ We increasingly rely on computational results we cannot feasibly verify ourselve
 
 Cryptographic proof systems solve this dilemma. Such protocols let an untrusted prover, who possesses some private data, convince a verifier that the data satisfies a public property. For example, this could include proving that you are over 18 or that your account has sufficient balance, without revealing anything else such as your full date of birth, or your financial history. Furthermore, the proofs or certificates produced by such systems are relative short, and can be verified in a matter of milliseconds, rather than the days or weeks required to re-execute the computation.
 
-Long in the realm of theory, cryptographic proof systems are now practical enough to be deployed for
-a number of applications, most notably in the context of making blockchains scalable and private. A
-number of teams are racing to build the most generic proof systems possible - a _zero-knowledge
-virtual machine (zkVM)_. Think of it like a virtual computer that allows one to run any computer
-program (as long as they are compiled to a common ISA like RISC-V), and then produce a certificate
-that the program was run correctly on any given input, producing the claimed output.
+Long in the realm of theory, cryptographic proof systems are now practical enough to be deployed for a number of applications, most notably in the context of making blockchains scalable and private. A number of teams are racing to build the most generic proof systems possible - a _zero-knowledge virtual machine (zkVM)_. Think of it like a virtual computer that allows one to run any computer program (as long as they are compiled to a common ISA like RISC-V), and then produce a certificate that the program was run correctly on any given input, producing the claimed output.
 
 This blog post is a glimpse into these exciting developments. It turns out that the fastest of such zkVMs, such as Jolt, derive its efficiency from a classical protocol first introduced in 1992, called the sum-check protocol. I will give an introduction to the sum-check protocol, detail well-known algorithms for the sum-check prover, and introduce a new technique that speeds up the sum-check prover in settings relevant to zkVMs.
-
-<!-- Add new writeup above, don't modify the draft below 
-
-Datasets are massive, compute is outsourced, and privacy and legal constraints often prevent direct access to inputs. Yet downstream decisions (scientific claims, safety checks, financial outcomes) depend on trusting these results.
-
-Consider two familiar scenarios. First, a scientist publishes an analysis derived from a private dataset: can peers trust the reported statistic without gaining access to the raw data or reproducing the full pipeline?
-
-Second, a distributed ledger processes a long sequence of state updates: can participants validate that the rules were followed without everyone re‑executing the entire computation?
-
-The default approach—to see all inputs and re‑execute the computation—is often impossible at modern scales. This raises a sharper question: can we verify correctness without re‑running the computation or revealing all of its inputs?
-
-Cryptographic proof systems change the interface. Instead of replaying the whole program, a prover supplies a short proof that a verifier can check quickly. If the proof verifies, the verifier gains high confidence that the claimed computation is correct—without re‑execution and without learning the hidden inputs.
-
-Why does this help so broadly? Because many computations reduce to “sum a structured function over many inputs.” The sum‑check protocol is a workhorse for certifying such sums. In a few interactive steps, it lets a prover convince a verifier that a very large sum (even over an exponentially large domain) has a particular value, by checking only a handful of low‑degree consistency conditions. Think of certifying an aggregate like a histogram total or a loss summed over 2^m configurations—without enumerating them.
-
-This capability underlies practical systems such as zk virtual machines (zkVMs), which let you take an arbitrary program and produce a succinct proof that it executed correctly on some (possibly private) input.
- -->
-
-<!-- Modern computing systems produce enormous amounts of data and perform immense quantity of
-computation, but with almost no verifiability (even when we need them).
-
-Two examples:
-
-1. correctness of data analysis on a large, potentially private dataset - an important part of reproducibility in science.
-2. correctness of a series of transactions on a blockchain - one that is verified not once, but potentially millions of times across the world
-
-Normally, one would expect that in order to verify that a computation is correct, you have to: (i)
-know all the inputs going into the computation, and (ii) re-run the same computation on those data.
-*Cryptographic proof systems* provide a way to eliminate these shortcomings.f
-
-Can you verify that a computation has been correctly performed, without re-executing it, or even
-knowing all the inputs to the computation?
-
-The sum-check protocol, introduced by Lund, Fortnow, Karloff, and Nisan in 1992 [[1]](#ref-1), is 
-
-sum-check is now at the core of state-of-the-art polynomial commitment schemes (WHIR, Basefold, FRI-Binius), folding schemes (HyperNova, LatticeFold(+)), and zero-knowledge virtual machine such as Jolt. For the last one -->
 
 ## Overview of the Sum-Check Protocol
 
