@@ -2,7 +2,7 @@
 # The title of your blogpost. No sub-titles are allowed, nor are line-breaks.
 title = "Algorithms for the Sum-check Protocol"
 # Date must be written in YYYY-MM-DD format. This should be updated right before the final PR is made.
-date = 2025-11-03
+date = 2025-11-14
 
 [taxonomies]
 # Keep any areas that apply, removing ones that don't. Do not add new areas!
@@ -44,67 +44,143 @@ The fastest of these zkVMs, such as Jolt, derive their efficiency from a classic
 
 <!-- This blog post is a glimpse into these exciting developments. It turns out that the fastest of such zkVMs, such as Jolt, derive its efficiency from a classical protocol first introduced in 1992, called the sum-check protocol. I will give an introduction to the sum-check protocol, detail well-known algorithms for the sum-check prover, and introduce a new technique that speeds up the sum-check prover in settings relevant to zkVMs. -->
 
-## Overview of the Sum-Check Protocol
+## Sum-Check Protocol Overview
 
-We work over a finite field $\mathbb{F}$. The setting of sum-check is that there is a multivariate
-polynomial $p(X_1, \dots, X_n) \in \mathbb{F}[X_1,\dots, X_n]$, of degree bounded by $d$ in each
-variable, and that the prover wants to convince the verifier that
+The sum-check protocol is an interactive proof that allows an untrusted prover to convince a computationally limited verifier of the value of a very large sum. Informally, the verifier wants to check the sum of a multivariate polynomial over a large product domain, but would like to avoid explicitly adding up all of the terms.
 
-\[
-    \sum_{(x_1,\dots,x_n) \in \{0,1\}^n} p(x_1,\dots,x_n) = c,    
-\]
+Formally, we fix a finite field $\mathbb{F}$ and a multivariate polynomial $p(X_1, \dots, X_n) \in \mathbb{F}[X_1,\dots, X_n]$,
+of degree bounded by $d$ in each variable. The sum-check claim is then
+$$
+    \sum_{x_1 \in H_1, \dots, x_n \in H_n} p(x_1,\dots,x_n) = c,    
+$$
+for some evaluation domains $H_1, \dots, H_n \subseteq \mathbb{F}$ and a claimed value $c \in \mathbb{F}$.
+In most applications, and for the remainder of this blog post, we restrict to the Boolean hypercube, i.e., $H_1 = \dots = H_n = \{0,1\}$.
 
-for some claim $c \in \mathbb{F}$. The verifier also knows about $p$ (or at least has access to
-an ``oracle'' that can respond with the evaluation of $p$ at any given value). Because of this, it
-is possible for the verifier to verify the claim itself - but this would take work on the order of
-$O(2^n)$. The key idea of sum-check is that by leveraging interaction with an untrusted prover, who
-may supply the verifier with additional ``auxiliary'' data, it may reduce the work of checking the
-original claim, to checking a claim about the polynomial $p$ at a \emph{single} point.
+The verifier knows $p$, or at least has oracle access to evaluations of $p$ at points of its choice, but wants to use this query access as little as possible. Naively, the verifier could evaluate $p$ on all $2^n$ points of $\{0,1\}^n$ and sum the results, which takes work on the order of $O(2^n)$. The key idea of sum-check is that, by interacting with an untrusted prover who supplies additional "auxiliary" polynomials, the verifier can reduce the work of checking the original claim to checking a related claim about $p$ at a single randomly chosen point.
 
-In particular, the data that the prover will send are "one-dimensional" slices of this multivariate
-polynomial. In the first round, the prover would send the univariate polynomial
-
-\[
+In particular, the data that the prover sends at each round are the "one-dimensional" slices of this multivariate
+polynomial. In the first round, the prover sends the univariate polynomial
+$$
     s_1(X) = \sum_{(x_2,\dots,x_n) \in \{0,1\}^{n-1}} p(X, x_2,\dots,x_n).
-\]
+$$
+If the original claim is correct, then $s_1(X)$ has degree at most $d$, and moreover
+$s_1(0) + s_1(1) = c$.
+The verifier checks precisely these two conditions, and rejects if either fails.
 
-If the original claim was correct, then $s_1(X)$ would have its degree bounded by $d$, and that
-$s_1(0) + s_1(1) = c$. The verifier checks precisely these two properties, then samples a random
-challenge $r_1 \gets \mathbb{F}$ from the finite field, and sends it to the prover. The point of
-this challenge is to enforce honesty from the prover 
+If both checks pass, the verifier samples a random challenge $r_1 \gets \mathbb{F}$ and sends it to the prover.
+The point of this random challenge is to "pin down" the prover’s behavior at a point of the verifier’s choice:
+if the prover has lied about $s_1(X)$, then with high probability (at most $d / |\mathbb{F}$|)
+the fake $s_1$ will disagree with the true polynomial at $X = r_1$.
+If we set the finite field size to be sufficiently large, e.g., at least $128$ bits for cryptographic security, then this probability is truly negligible.
 
-After one round of interaction, the prover and verifier has effectively reduced the problem to showing that
-\[
-    \sum_{(x_2,\dots, x_n) \in \{0,1\}^{n-1}} p_{r_1}(x_2, \dots, x_n) = c_1
-\]
+After this first round of interaction, the prover and verifier have effectively reduced the problem to showing that
+$$
+    \sum_{(x_2,\dots, x_n) \in \{0,1\}^{n-1}} p_{r_1}(x_2, \dots, x_n) = c_1,
+$$
+where we define $p_{r_1}(x_2,\dots,x_n) := p(r_1, x_2,\dots,x_n)$ and $c_1 := s_1(r_1)$.
+That is, we have "fixed" the first variable to $r_1$ and now need to verify a new sum-check claim in $n-1$
+variables.
+The protocol then repeats the same pattern on this new instance:
+in the second round, the prover sends a univariate polynomial
+$$
+    s_2(X) = \sum_{(x_3,\dots,x_n) \in \{0,1\}^{n-2}} p_{r_1}(X, x_3,\dots,x_n),
+$$
+the verifier checks the degree and a simple consistency relation analogous to $s_1(0) + s_1(1) = c_1$,
+samples a fresh random $r_2 \gets \mathbb{F}$, and so on.
 
-Brief discussion on correctness (obvious) and soundness (not-so-obvious). The idea is that, if the
-prover cheats and does not send the ``expected'' polynomial for some round, then it would be caught
-with high probability, due to the error-amplifying nature of polynomials (also called the
-Schwartz-Zippel lemma (cite)).
+After $n$ rounds, all variables have been fixed to random challenges $r_1,\dots,r_n \in \mathbb{F}$,
+and the verifier is left with a single claim of the form
+$$
+    p(r_1,\dots,r_n) = c_n
+$$
+that it can check directly using its oracle access to $p$.
+
+What properties does the sum-check protocol satisfy? The first is **completeness**. If the original sum claim is correct and the prover follows the rules, then every round’s check passes, and at the end we really do have $p(r_1,\dots,r_n) = c_n$, so the verifier accepts.
+
+The more interesting property is **soundness**, which is about what happens when the original claim is actually false. In that case, no matter how a (possibly malicious) prover behaves, at some round it must send a polynomial that is not the "right" one. Two different low-degree polynomials over a field can only agree on a small fraction of inputs (also known as the Schwartz–Zippel lemma); thus, a random challenge $r_i$ will land on a point where they differ except with probability at most $d / |\mathbb{F}|$. Thus, even when the claim is wrong, a cheating prover can make the verifier accept only with negligible probability.
 
 ## Brief Interlude on Multilinear Polynomials
 
-So far, we have only describe sum-check as a protocol on polynomials. But how does this relate to any
-computation performed in the real world? The key answer is encoding, or arithmetization. The computation
-that we want to prove will need to first be transformed into a number of polynomial identities, which
-are then proven via a series of sum-checks.
+So far, we have only described sum-check as a protocol on polynomials over finite fields. But how does this relate to any
+computation performed in the real world? The key bridge between the two is called the **arithmetization** of the computation:
+we first transform the computation trace—such as the values of all registers over time, or the sequence of memory accesses and
+intermediate constraint values—into polynomials, and then we use sum-check to reason about those polynomials instead of the
+original computation.
 
-The most common encoding process is by lifting vectors of some quantity we care about (i.e. the
-value being read over all cycles of a program) into the finite field, and then interpreting it as
-representing a _multilinear polynomial_
+The most common arithmetization method used in modern proof systems is to package these traces and constraint tables into
+**multilinear polynomials**.
+A multilinear polynomial is a multivariate polynomial where each variable appears with degree at most $1$.
+For instance,
+$$
+    q(X_1, X_2, X_3) = 3X_1 X_3 + 2X_2 + 5
+$$
+is multilinear, while $X_1^2 + X_2$ is not. A key fact is that a multilinear polynomial in $n$ variables is uniquely
+determined by its values on the $2^n$ points of the Boolean hypercube $\{0,1\}^n$. This means we can equivalently think
+of a length-$2^n$ vector as giving the evaluations of some multilinear polynomial on $\{0,1\}^n$.
 
-What they are: multivariate polynomial where each variable is of degree at most $1$. Example: (some 3-variate multilinear)
+This correspondence can be made precise. Given a function $p : \{0,1\}^n \to \mathbb{F}$ (for example, a vector of trace or constraint values indexed by
+$y \in \{0,1\}^n$), its **multilinear extension** is the unique multilinear polynomial $\widetilde{p}(X_1,\dots,X_n)$
+that agrees with $p$ on all Boolean points. One convenient way to write this extension is
+$$
+    \widetilde{p}(X_1,\dots, X_n) = \sum_{y \in \{0,1\}^n} \widetilde{eq}(\vec{X}, y) \cdot p(y),
+$$
+where the "equality" polynomial $\widetilde{eq}$ is defined by
+$$
+    \widetilde{eq}(\vec{X}, \vec{Y}) = \prod_{i=1}^n \big((1 - X_i)(1 - Y_i) + X_i Y_i\big).
+$$
+For $\vec{x}, \vec{y} \in \{0,1\}^n$, this satisfies $\widetilde{eq}(\vec{x}, \vec{y}) = 1$ if $\vec{x} = \vec{y}$
+and $0$ otherwise, so each term in the sum "picks out" the value $p(y)$ at exactly one point on the hypercube.
 
-In general, $n$ variables give $2^n$ coefficients. In fact, it is more convenient to think of these vectors as representing the _evaluations_ of the polynomial at some interpolating set, say the _Boolean hypercube_ $\{0,1\}^n$[^1]
+As a tiny example of a multilinear extension in one variable, imagine a 2-cycle program where a register holds values
+$(a_0, a_1)$ over time. We can view this as a function $p : \{0,1\} \to \mathbb{F}$ with $p(0) = a_0$ and $p(1) = a_1$.
+Its multilinear extension is the unique degree-1 polynomial
+$$
+    \widetilde{p}(X) = a_0 \cdot (1 - X) + a_1 \cdot X,
+$$
+which agrees with the original values at $X = 0$ and $X = 1$, but can also be evaluated at non-Boolean points such as
+$X = 1/2$, or indeed any point in the finite field $\mathbb{F}$. In exactly the same way, an $n$-dimensional table of
+values can be turned into a multilinear polynomial in $n$ variables.
 
-What is an interpolating set? This is just another word for ``basis'', namely that 
+This multilinear extension viewpoint is what lets us turn discrete objects like execution traces and constraint
+tables into low-degree polynomials, which are precisely the objects that sum-check knows how to handle.
 
-This leads us to the \emph{multilinear extension} formula:
-\[ \widetilde{p}(X_1,\dots, X_n) = \sum_{y \in \{0,1\}^n} \widetilde{eq}(\vec{X}, y) \cdot p(y),\]
-with equality polynomial chosen for being the basis of this evaluation domain
-\[\widetilde{eq}(\vec{X}, \vec{Y}) = \prod_{i=1}^n ((1-X_i) \cdot (1-Y_i) + X_i \cdot Y_i),\]
-which satisfy the condition that for $\vec{x}, \vec{y} \in \{0,1\}^n$, $\widetilde{eq}(x, y) = (x \overset{?}{=} y) \in \{0,1\}$.
+### Example: Arithmetizing a Batched Zero-Check
+
+To see how this connects back to sum-check, consider a very simple proof goal: you want to prove that **four constraints
+all vanish**. Label the four points of $\{0,1\}^2$ as
+$(0,0), (0,1), (1,0), (1,1)$, and suppose you have two functions
+$$
+    p, q : \{0,1\}^2 \to \mathbb{F}
+$$
+such that you want to prove
+$$
+    p(x_1, x_2) \cdot q(x_1, x_2) = 0 \quad \text{for all } (x_1, x_2) \in \{0,1\}^2.
+$$
+You can think of each pair $p(x_1, x_2), q(x_1, x_2)$ as encoding one local constraint, so this is just a
+**batched zero-check** for four constraints.
+
+This pointwise condition can be bundled into a single sum over the hypercube. Define
+$$
+    g(x_1, x_2) = p(x_1, x_2) \cdot q(x_1, x_2),
+$$
+and consider the claim that
+$$
+    g(x_1, x_2) = 0 \quad \text{for all } (x_1, x_2) \in \{0,1\}^2.
+$$
+Equivalently, the multilinear extension $\widetilde{g}$ should vanish on all Boolean points. Using the equality
+polynomial, we can package this as the single identity
+$$
+    \sum_{(x_1, x_2) \in \{0,1\}^2} \widetilde{eq}\big((r_1, r_2), (x_1, x_2)\big) \cdot p(x_1, x_2) \cdot q(x_1, x_2) = 0
+$$
+for a randomly chosen point $(r_1, r_2) \in \mathbb{F}^2$.
+The left-hand side is exactly the evaluation $\widetilde{g}(r_1, r_2)$ of the multilinear extension of $g$
+at the random point $(r_1, r_2)$. So, instead of checking four separate equalities $g(x) = 0$ at the cube points,
+we check a **single** polynomial identity at a random point.
+
+This is now in the right shape for sum-check: it is a sum over $(x_1, x_2) \in \{0,1\}^2$ of a polynomial in
+$x_1, x_2, r_1, r_2$. In larger systems, we do the same thing with many more variables and many more constraints:
+pointwise "zero checks" $p(x) \cdot q(x) = 0$ over a hypercube are encoded as a single sum-check instance over
+a polynomial built from the equality polynomial and the multilinear encodings of $p$ and $q$.
 
 ## Existing Algorithms for Sum-Check
 
@@ -114,9 +190,9 @@ Why? captures known applications. Example: a zero-check of quadratic constraints
 
 In fact, let's just focus on a single case: a product of two multilinear polynomials:
 
-\[
+$$
     \sum_{x \in \{0,1\}^n} p(x) * q(x) = c.
-]
+$$
 
 We assume $p$ and $q$ are given by their evaluations on $\{0,1\}^n$.
 
@@ -146,10 +222,10 @@ So, we can compute from scratch every round, or at least until there is enough s
 materialize the polynomial
 
 Indeed, we can compute from the initial evaluations since
-\[
+$$
     s_i(X) = \sum_{\vec{x'} \in \{0,1\}^{n - i - 1}} p(r_1, \dots, r_{i-1}, X, \vec{x'}) \cdot q(r_1, \dots, r_{i-1}, X, \vec{x'}) \\
     = \sum_{(x_{i+1},\dots,x_n) \in \{0,1\}^{n - i - 1}} (\sum_{(y_1,\dots,y_{i-1})} \widetilde{eq}(\vec{r}, \vec{y}) \cdot p(\vec{y}, X, \vec{x'})) \cdot (\sum_{(y_1,\dots,y_{i-1})} \widetilde{eq}(\vec{r}, \vec{y}) \cdot q(\vec{y}, X, \vec{x'})).
-\]
+$$
 
 This looks like a mouthful, but it actually gives us a nice algorithm to compute $s_i(u)$ for all $u
 = 0, 1, 2$ via a single pass over the stream of evaluations of $p$ and $q$. We stream, chunk by
