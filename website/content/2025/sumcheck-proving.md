@@ -100,39 +100,85 @@ The more interesting property is **soundness**, which is about what happens when
 ## Brief Interlude on Multilinear Polynomials
 
 So far, we have only described sum-check as a protocol on polynomials over finite fields. But how does this relate to any
-computation performed in the real world? The key bridge between the two is called the **arithmetization** of the computation: we first transform
-the computation we care about into a collection of polynomial identities, and then we use sum-check to verify
-those identities.
+computation performed in the real world? The key bridge between the two is called the **arithmetization** of the computation:
+we first transform the computation trace—such as the values of all registers over time, or the sequence of memory accesses and
+intermediate constraint values—into polynomials, and then we use sum-check to reason about those polynomials instead of the
+original computation.
 
-The most common encoding process starts from vectors that record some quantity we care about over time
-(for example, the value of a register over all cycles of a program). We lift these vectors into a finite field
-$\mathbb{F}$ and interpret them as specifying a **multilinear polynomial**.
-
+The most common arithmetization method used in modern proof systems is to package these traces and constraint tables into
+**multilinear polynomials**.
 A multilinear polynomial is a multivariate polynomial where each variable appears with degree at most $1$.
 For instance,
 $$
-    p(X_1, X_2, X_3) = 3X_1X_3 + 2X_2 + 5
+    q(X_1, X_2, X_3) = 3X_1 X_3 + 2X_2 + 5
 $$
-is multilinear, while $X_1^2 + X_2$ is not. A key fact is that a multilinear polynomial in $n$ variables is
-uniquely determined by its values on the $2^n$ points of the Boolean hypercube $\{0,1\}^n$. This means we can
-equivalently think of a length-$2^n$ vector as giving the evaluations of some multilinear polynomial on
-$\{0,1\}^n$.
+is multilinear, while $X_1^2 + X_2$ is not. A key fact is that a multilinear polynomial in $n$ variables is uniquely
+determined by its values on the $2^n$ points of the Boolean hypercube $\{0,1\}^n$. This means we can equivalently think
+of a length-$2^n$ vector as giving the evaluations of some multilinear polynomial on $\{0,1\}^n$.
 
-Given a function $p : \{0,1\}^n \to \mathbb{F}$ (for example, a vector of trace values indexed by $y \in \{0,1\}^n$),
-its **multilinear extension** is the unique multilinear polynomial $\widetilde{p}(X_1,\dots,X_n)$ that agrees
-with $p$ on all Boolean points. One convenient way to write this extension is
+This correspondence can be made precise. Given a function $p : \{0,1\}^n \to \mathbb{F}$ (for example, a vector of trace or constraint values indexed by
+$y \in \{0,1\}^n$), its **multilinear extension** is the unique multilinear polynomial $\widetilde{p}(X_1,\dots,X_n)$
+that agrees with $p$ on all Boolean points. One convenient way to write this extension is
 $$
     \widetilde{p}(X_1,\dots, X_n) = \sum_{y \in \{0,1\}^n} \widetilde{eq}(\vec{X}, y) \cdot p(y),
 $$
 where the "equality" polynomial $\widetilde{eq}$ is defined by
 $$
-    \widetilde{eq}(\vec{X}, \vec{Y}) = \prod_{i=1}^n \big((1-X_i)(1-Y_i) + X_i Y_i\big).
+    \widetilde{eq}(\vec{X}, \vec{Y}) = \prod_{i=1}^n \big((1 - X_i)(1 - Y_i) + X_i Y_i\big).
 $$
 For $\vec{x}, \vec{y} \in \{0,1\}^n$, this satisfies $\widetilde{eq}(\vec{x}, \vec{y}) = 1$ if $\vec{x} = \vec{y}$
 and $0$ otherwise, so each term in the sum "picks out" the value $p(y)$ at exactly one point on the hypercube.
 
+As a tiny example of a multilinear extension in one variable, imagine a 2-cycle program where a register holds values
+$(a_0, a_1)$ over time. We can view this as a function $p : \{0,1\} \to \mathbb{F}$ with $p(0) = a_0$ and $p(1) = a_1$.
+Its multilinear extension is the unique degree-1 polynomial
+$$
+    \widetilde{p}(X) = a_0 \cdot (1 - X) + a_1 \cdot X,
+$$
+which agrees with the original values at $X = 0$ and $X = 1$, but can also be evaluated at non-Boolean points such as
+$X = 1/2$, or indeed any point in the finite field $\mathbb{F}$. In exactly the same way, an $n$-dimensional table of
+values can be turned into a multilinear polynomial in $n$ variables.
+
 This multilinear extension viewpoint is what lets us turn discrete objects like execution traces and constraint
 tables into low-degree polynomials, which are precisely the objects that sum-check knows how to handle.
+
+### Example: Arithmetizing a Batched Zero-Check
+
+To see how this connects back to sum-check, consider a very simple proof goal: you want to prove that **four constraints
+all vanish**. Label the four points of $\{0,1\}^2$ as
+$(0,0), (0,1), (1,0), (1,1)$, and suppose you have two functions
+$$
+    p, q : \{0,1\}^2 \to \mathbb{F}
+$$
+such that you want to prove
+$$
+    p(x_1, x_2) \cdot q(x_1, x_2) = 0 \quad \text{for all } (x_1, x_2) \in \{0,1\}^2.
+$$
+You can think of each pair $p(x_1, x_2), q(x_1, x_2)$ as encoding one local constraint, so this is just a
+**batched zero-check** for four constraints.
+
+This pointwise condition can be bundled into a single sum over the hypercube. Define
+$$
+    g(x_1, x_2) = p(x_1, x_2) \cdot q(x_1, x_2),
+$$
+and consider the claim that
+$$
+    g(x_1, x_2) = 0 \quad \text{for all } (x_1, x_2) \in \{0,1\}^2.
+$$
+Equivalently, the multilinear extension $\widetilde{g}$ should vanish on all Boolean points. Using the equality
+polynomial, we can package this as the single identity
+$$
+    \sum_{(x_1, x_2) \in \{0,1\}^2} \widetilde{eq}\big((r_1, r_2), (x_1, x_2)\big) \cdot p(x_1, x_2) \cdot q(x_1, x_2) = 0
+$$
+for a randomly chosen point $(r_1, r_2) \in \mathbb{F}^2$.
+The left-hand side is exactly the evaluation $\widetilde{g}(r_1, r_2)$ of the multilinear extension of $g$
+at the random point $(r_1, r_2)$. So, instead of checking four separate equalities $g(x) = 0$ at the cube points,
+we check a **single** polynomial identity at a random point.
+
+This is now in the right shape for sum-check: it is a sum over $(x_1, x_2) \in \{0,1\}^2$ of a polynomial in
+$x_1, x_2, r_1, r_2$. In larger systems, we do the same thing with many more variables and many more constraints:
+pointwise "zero checks" $p(x) \cdot q(x) = 0$ over a hypercube are encoded as a single sum-check instance over
+a polynomial built from the equality polynomial and the multilinear encodings of $p$ and $q$.
 
 ## Existing Algorithms for Sum-Check
 
