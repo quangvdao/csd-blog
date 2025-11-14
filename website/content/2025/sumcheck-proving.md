@@ -2,7 +2,7 @@
 # The title of your blogpost. No sub-titles are allowed, nor are line-breaks.
 title = "Algorithms for the Sum-check Protocol"
 # Date must be written in YYYY-MM-DD format. This should be updated right before the final PR is made.
-date = 2025-11-03
+date = 2025-11-14
 
 [taxonomies]
 # Keep any areas that apply, removing ones that don't. Do not add new areas!
@@ -42,44 +42,60 @@ Long in the realm of theory, cryptographic proof systems are now practical enoug
 
 This blog post is a glimpse into these exciting developments. It turns out that the fastest of such zkVMs, such as Jolt, derive its efficiency from a classical protocol first introduced in 1992, called the sum-check protocol. I will give an introduction to the sum-check protocol, detail well-known algorithms for the sum-check prover, and introduce a new technique that speeds up the sum-check prover in settings relevant to zkVMs.
 
-## Overview of the Sum-Check Protocol
+## Sum-Check Protocol Overview
 
-We work over a finite field $\mathbb{F}$. The setting of sum-check is that there is a multivariate
-polynomial $p(X_1, \dots, X_n) \in \mathbb{F}[X_1,\dots, X_n]$, of degree bounded by $d$ in each
-variable, and that the prover wants to convince the verifier that
+The sum-check protocol is an interactive proof that allows an untrusted prover to convince a computationally limited verifier of the value of a very large sum. Informally, the verifier wants to check the sum of a multivariate polynomial over a large product domain, but would like to avoid explicitly adding up all of the terms.
 
+Formally, we fix a finite field $\mathbb{F}$ and a multivariate polynomial $p(X_1, \dots, X_n) \in \mathbb{F}[X_1,\dots, X_n]$,
+of degree bounded by $d$ in each variable. The sum-check claim is then
 \[
-    \sum_{(x_1,\dots,x_n) \in \{0,1\}^n} p(x_1,\dots,x_n) = c,    
+    \sum_{x_1 \in H_1, \dots, x_n \in H_n} p(x_1,\dots,x_n) = c,    
 \]
+for some evaluation domains $H_1, \dots, H_n \subseteq \mathbb{F}$ and a claimed value $c \in \mathbb{F}$.
+In most applications, and for the remainder of this blog post, we restrict to the Boolean hypercube, i.e., $H_1 = \dots = H_n = \{0,1\}$.
 
-for some claim $c \in \mathbb{F}$. The verifier also knows about $p$ (or at least has access to
-an ``oracle'' that can respond with the evaluation of $p$ at any given value). Because of this, it
-is possible for the verifier to verify the claim itself - but this would take work on the order of
-$O(2^n)$. The key idea of sum-check is that by leveraging interaction with an untrusted prover, who
-may supply the verifier with additional ``auxiliary'' data, it may reduce the work of checking the
-original claim, to checking a claim about the polynomial $p$ at a \emph{single} point.
+The verifier knows $p$, or at least has oracle access to evaluations of $p$ at points of its choice, but wants to use this query access as little as possible. Naively, the verifier could evaluate $p$ on all $2^n$ points of $\{0,1\}^n$ and sum the results, which takes work on the order of $O(2^n)$. The key idea of sum-check is that, by interacting with an untrusted prover who supplies additional "auxiliary" polynomials, the verifier can reduce the work of checking the original claim to checking a related claim about $p$ at a single randomly chosen point.
 
-In particular, the data that the prover will send are "one-dimensional" slices of this multivariate
-polynomial. In the first round, the prover would send the univariate polynomial
-
+In particular, the data that the prover sends at each round are the "one-dimensional" slices of this multivariate
+polynomial. In the first round, the prover sends the univariate polynomial
 \[
     s_1(X) = \sum_{(x_2,\dots,x_n) \in \{0,1\}^{n-1}} p(X, x_2,\dots,x_n).
 \]
+If the original claim is correct, then $s_1(X)$ has degree at most $d$, and moreover
+$s_1(0) + s_1(1) = c$.
+The verifier checks precisely these two conditions, and rejects if either fails.
 
-If the original claim was correct, then $s_1(X)$ would have its degree bounded by $d$, and that
-$s_1(0) + s_1(1) = c$. The verifier checks precisely these two properties, then samples a random
-challenge $r_1 \gets \mathbb{F}$ from the finite field, and sends it to the prover. The point of
-this challenge is to enforce honesty from the prover 
+If both checks pass, the verifier samples a random challenge $r_1 \gets \mathbb{F}$ and sends it to the prover.
+The point of this random challenge is to "pin down" the prover’s behavior at a point of the verifier’s choice:
+if the prover has lied about $s_1(X)$, then with high probability (at most $d / |\mathbb{F}$|)
+the fake $s_1$ will disagree with the true polynomial at $X = r_1$.
+If we set the finite field size to be sufficiently large, e.g., at least $128$ bits for cryptographic security, then this probability is truly negligible.
 
-After one round of interaction, the prover and verifier has effectively reduced the problem to showing that
+After this first round of interaction, the prover and verifier have effectively reduced the problem to showing that
 \[
-    \sum_{(x_2,\dots, x_n) \in \{0,1\}^{n-1}} p_{r_1}(x_2, \dots, x_n) = c_1
+    \sum_{(x_2,\dots, x_n) \in \{0,1\}^{n-1}} p_{r_1}(x_2, \dots, x_n) = c_1,
 \]
+where we define $p_{r_1}(x_2,\dots,x_n) := p(r_1, x_2,\dots,x_n)$ and $c_1 := s_1(r_1)$.
+That is, we have "fixed" the first variable to $r_1$ and now need to verify a new sum-check claim in $n-1$
+variables.
+The protocol then repeats the same pattern on this new instance:
+in the second round, the prover sends a univariate polynomial
+\[
+    s_2(X) = \sum_{(x_3,\dots,x_n) \in \{0,1\}^{n-2}} p_{r_1}(X, x_3,\dots,x_n),
+\]
+the verifier checks the degree and a simple consistency relation analogous to $s_1(0) + s_1(1) = c_1$,
+samples a fresh random $r_2 \gets \mathbb{F}$, and so on.
 
-Brief discussion on correctness (obvious) and soundness (not-so-obvious). The idea is that, if the
-prover cheats and does not send the ``expected'' polynomial for some round, then it would be caught
-with high probability, due to the error-amplifying nature of polynomials (also called the
-Schwartz-Zippel lemma (cite)).
+After $n$ rounds, all variables have been fixed to random challenges $r_1,\dots,r_n \in \mathbb{F}$,
+and the verifier is left with a single claim of the form
+\[
+    p(r_1,\dots,r_n) = c_n
+\]
+that it can check directly using its oracle access to $p$.
+
+What properties does the sum-check protocol satisfy? The first is **completeness**. If the original sum claim is correct and the prover follows the rules, then every round’s check passes, and at the end we really do have $p(r_1,\dots,r_n) = c_n$, so the verifier accepts.
+
+The more interesting property is **soundness**, which is about what happens when the original claim is actually false. In that case, no matter how a (possibly malicious) prover behaves, at some round it must send a polynomial that is not the "right" one. Two different low-degree polynomials over a field can only agree on a small fraction of inputs (also known as the Schwartz–Zippel lemma); thus, a random challenge $r_i$ will land on a point where they differ except with probability at most $d / |\mathbb{F}|$. Thus, even when the claim is wrong, a cheating prover can make the verifier accept only with negligible probability.
 
 ## Brief Interlude on Multilinear Polynomials
 
