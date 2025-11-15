@@ -184,20 +184,36 @@ a polynomial built from the equality polynomial and the multilinear encodings of
 
 ## Existing Algorithms for Sum-Check
 
-Special focus: sum-check over low-degree functions applied to a number of multilinear polynomials
-
-Why? captures known applications. Example: a zero-check of quadratic constraints.
-
-In fact, let's just focus on a single case: a product of two multilinear polynomials:
-
+We now turn to algorithms for the prover. We will focus on the most common setting in modern proof systems: sum-check over a low-degree function applied to one or more multilinear polynomials. This captures many real applications, such as the batched zero-check we saw earlier. Concretely, consider the case of a product of two multilinear polynomials
 $$
-    \sum_{x \in \{0,1\}^n} p(x) * q(x) = c.
+    \sum_{x \in \{0,1\}^n} p(x) \cdot q(x) = c,
 $$
-
-We assume $p$ and $q$ are given by their evaluations on $\{0,1\}^n$.
+where $p, q : \{0,1\}^n \to \mathbb{F}$ are given by their evaluations on the Boolean hypercube. This is exactly the kind of batched zero-check we saw earlier, just written as a single large sum.
 
 ### Linear-time algorithm
 
+The first prover algorithm we consider, following Vu, Setty, Blumberg, and Walfish [4] and Thaler [3], runs in linear time in the number of points but also uses linear space. In the first round of sum-check, the prover computes and sends the univariate polynomial
+$$
+    s_1(X) = \sum_{(x_2,\dots,x_n) \in \{0,1\}^{n-1}} p(X, x_2,\dots,x_n) \cdot q(X, x_2,\dots,x_n).
+$$
+Since $s_1(X)$ has degree at most $2$, it is completely determined by its three values $s_1(0), s_1(1), s_1(2)$. The prover can compute these in a single pass over the $2^n$ evaluations of $p$ and $q$: for each point $(x_1,\dots,x_n)$, it updates the running sums for $s_1(0)$, $s_1(1)$, or $s_1(2)$ depending on the value of $x_1$.
+
+After the verifier sends a random challenge $r_1$, the prover needs the “bound” polynomials
+$$
+    p_{r_1}(x_2,\dots,x_n) := p(r_1, x_2,\dots,x_n), \quad
+    q_{r_1}(x_2,\dots,x_n) := q(r_1, x_2,\dots,x_n)
+$$
+in order to continue the protocol on $n-1$ variables. The linear-time algorithm explicitly materializes the evaluations of $p_{r_1}$ and $q_{r_1}$ on $\{0,1\}^{n-1}$ by making another pass over the original table and writing out a new table of size $2^{n-1}$. In the second round, it repeats the same pattern on these smaller tables to compute $s_2$, then binds another variable and shrinks the tables again, and so on.
+
+The total running time is dominated by the first few rounds. Summing over all rounds, the work is
+$$
+    O(2^n + 2^{n-1} + \dots + 1) = O(2^n),
+$$
+which is essentially optimal in this model. However, the prover must always store the current table of evaluations, whose size is $\Theta(2^n)$.
+
+The linear-space usage may be fine for small-to-medium sum-check instances, but eventually will become a bottleneck. Even if the underlying execution trace fits comfortably in memory—for example, traces for up to around one hundred million RISC-V cycles—the extra space needed to store full evaluation tables for $p$ and $q$ makes billion-scale statements impractical. This motivates looking for algorithms that use much less memory, even at the cost of some extra recomputation.
+
+<!-- 
 This first algorithm is due to vsbw13 and thaler13 (add refs to cites)
 
 Compute $s_1(X)$ from its evaluations at $0, 1, 2$ (degree-2 requires 3 evaluations) via summing over ...
@@ -210,7 +226,7 @@ Problem: requires linear space as well. Quickly grows untenable as the number of
 (cannot prove billion-sized statements)
 
 assume the trace still fits in memory (which is the case when proving up to one hundred million
-RISC-V cycles). however, there won't be enough space to store the evaluations as in the linear-time algorithm
+RISC-V cycles). however, there won't be enough space to store the evaluations as in the linear-time algorithm -->
 
 ### Log-space / streaming algorithm
 
