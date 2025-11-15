@@ -230,7 +230,33 @@ RISC-V cycles). however, there won't be enough space to store the evaluations as
 
 ### Log-space / streaming algorithm
 
-Note the model: assume there is enough storage (perhaps in a hard
+Next, consider a more memory-frugal model. We assume there is enough persistent storage (for example, on disk) to hold all evaluations of $p$ and $q$ on $\{0,1\}^n$, but not enough RAM to store the intermediate “bound” evaluation tables such as $p_{r_1}, p_{r_1,r_2}$, and so on. Alternatively, we can generate the original evaluations cheaply on the fly, but do not have space to cache any of the bound evaluations. In this setting, the prover recomputes what it needs from scratch in each round instead of materializing smaller tables.
+
+Fix a round $i$. The prover needs to send the degree-2 polynomial
+$$
+    s_i(X) = \sum_{(x_{i+1},\dots,x_n) \in \{0,1\}^{n-i}} p(r_1,\dots,r_{i-1}, X, x_{i+1},\dots,x_n)
+                                           \cdot q(r_1,\dots,r_{i-1}, X, x_{i+1},\dots,x_n).
+$$
+By the multilinear-extension viewpoint and the equality polynomial introduced earlier, we can write these partially bound evaluations explicitly. Let
+$$
+    \vec{Z} = (r_1,\dots,r_{i-1}, X, x_{i+1},\dots,x_n).
+$$
+Then the multilinear extension formula says
+$$
+    p(\vec{Z}) = \sum_{y \in \{0,1\}^n} \widetilde{eq}(\vec{Z}, y) \cdot p(y),
+$$
+and the same holds for $q$. In other words, each term $p(r_1,\dots,r_{i-1}, X, x_{i+1},\dots,x_n)$ is a fixed linear combination of the original values $p(y)$, with weights that depend only on $(r_1,\dots,r_{i-1}, X)$ and the prefix of $y$. This means that to compute $s_i(u)$ for $u \in \{0,1,2\}$, we can make a *single pass* over the original evaluation tables of $p$ and $q$, streaming them from disk or regenerating them as needed, and maintain three running sums for $s_i(0)$, $s_i(1)$, and $s_i(2)$.
+
+What all the above math means for implementation is the following. For each round $i$, the streaming prover will:
+
+- Initialize three accumulators for $s_i(0), s_i(1), s_i(2)$.
+- Stream through all $2^n$ original evaluation points $y = (y_1,\dots,y_n)$ in a fixed order.
+- For each $y$, compute its contribution to $p(r_1,\dots,r_{i-1}, u, \cdot)$ and $q(r_1,\dots,r_{i-1}, u, \cdot)$ via the equality-polynomial weights, for each $u \in \{0,1,2\}$, and update the corresponding accumulators.
+- At the end of the pass, interpolate the unique degree-2 polynomial $s_i(X)$ from its values at $X = 0, 1, 2$.
+
+Crucially, we never store any bound evaluation tables: each round reuses the same underlying stream of $2^n$ values. The final asymptotic cost is therefore $O(2^n \cdot n)$ time, since we perform work proportional to the original table in each of the $n$ rounds, and $O(n)$ space, to store the current challenges and a handful of accumulators. In terms of $M = 2^n$, this is a quasilinear-time, $O(\log M)$-space prover. In practice, one can switch to the linear-time algorithm once the remaining bound tables fit in memory; this often happens before the halfway point in the protocol, so we only need to stream for the first few rounds and save roughly half of the total work.
+
+<!-- Note the model: assume there is enough storage (perhaps in a hard
 drive) to store all the evaluations, but not enough storage in RAM to store the intermediate
 values. Alternatively, the evaluations can be generated cheaply on-the-fly, but not enough storage (RAM or otherwise) for the bound evaluations.
 
@@ -246,6 +272,8 @@ $$
 This looks like a mouthful, but it actually gives us a nice algorithm to compute $s_i(u)$ for all $u
 = 0, 1, 2$ via a single pass over the stream of evaluations of $p$ and $q$. We stream, chunk by
 $2^{i-1}$ terms, then sum again over those chunked terms. (TODO: write this out more clearly)
+
+Final asymptotic: $O(2^n \cdot n)$ since we have to do work on the entire original evaluations for each of the $n$ rounds. But, we can keep the space usage down to $O(n)$ by streaming the eq-polynomial evaluations. A slight speedup in practice is possible by switching to the linear-time algorithm whenever the remaining bound polynomials fit in memory. This often happens before the mid-way point in the protocol, in which case we can save half the work (i.e. we don't have to stream for the last half of the rounds). -->
 
 ## New Idea: Delayed Binding and its Benefits
 
