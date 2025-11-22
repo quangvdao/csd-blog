@@ -204,18 +204,22 @@ $$
 
 After the verifier sends a random challenge $r_1$, the prover needs the “bound” polynomials
 $$
-    p_{r_1}(x_2,\dots,x_n) := p(r_1, x_2,\dots,x_n), \quad
-    q_{r_1}(x_2,\dots,x_n) := q(r_1, x_2,\dots,x_n)
+    p_{1}(x_2,\dots,x_n) := p(r_1, x_2,\dots,x_n), \quad
+    q_{1}(x_2,\dots,x_n) := q(r_1, x_2,\dots,x_n)
 $$
-in order to continue the protocol on $n-1$ variables. The linear-time algorithm explicitly materializes the evaluations of $p_{r_1}$ and $q_{r_1}$ on $\{0,1\}^{n-1}$ by making another pass over the original table and writing out a new table of size $2^{n-1}$. In the second round, it repeats the same pattern on these smaller tables to compute $s_2$, then binds another variable and shrinks the tables again, and so on.
+in order to continue the protocol on $n-1$ variables. The linear-time algorithm explicitly materializes the evaluations of $p_{1}$ and $q_{1}$ on $\{0,1\}^{n-1}$ by making another pass over the original table and writing out two new vectors of evaluations, each of size $2^{n-1}$. The update formula is
+$$
+    p_{1}(x_2,\dots,x_n) = (1 - r_1) \cdot p(0, x_2,\dots,x_n) + r_1 \cdot p(1, x_2,\dots,x_n), \\
+    q_{1}(x_2,\dots,x_n) = (1 - r_1) \cdot q(0, x_2,\dots,x_n) + r_1 \cdot q(1, x_2,\dots,x_n).
+$$
 
-The total running time is dominated by the first few rounds. Summing over all rounds, the work is
-$$
-    O(2^n + 2^{n-1} + \dots + 1) = O(2^n),
-$$
-which is essentially optimal in this model. However, the prover must always store the current table of evaluations, whose size is $\Theta(2^n)$.
+In each subsequent round $i = 2, 3, \dots, n$, the prover repeats the same pattern on these smaller vectors of evaluations to compute $s_i$, then binds the next challenge $r_i$ and shrinks the vectors of evaluations again, and so on.
 
-The linear-space usage may be fine for small-to-medium sum-check instances, but eventually will become a bottleneck. Even if the underlying execution trace fits comfortably in memory—for example, traces for up to around one hundred million RISC-V cycles—the extra space needed to store full evaluation tables for $p$ and $q$ makes billion-scale statements impractical. This motivates looking for algorithms that use much less memory, even at the cost of some extra recomputation.
+**Cost Analysis:** Given the description of the sum-check prover, it is clear that in round $i$, the prover needs to perform $O(2^{n -i})$ number of field operations (additions, subtractions, and multiplications). Summing over all rounds, the total work is therefore linear in the number of summands $N = 2^n$:
+$$
+    O(2^n + 2^{n-1} + \dots + 1) = O(2^n).
+$$
+One downside of this algorithm is the need to keep **linear** storage (for instance, starting from round $2$, where the prover needs to store $p_1$ and $q_1$). This linear-space usage may be fine for small-to-medium sum-check instances, but eventually will become a bottleneck. Concretely, this means that on consumer hardware with (say) 16GB of RAM, we can prove a few dozen millions cycles of RISC-V program execution, but not a billion cycles. As RAM is a limited resource, this limitation motivates us to look for algorithms that use fewer memory, even at the cost of some extra recomputation.
 
 <!-- 
 This first algorithm is due to vsbw13 and thaler13 (add refs to cites)
@@ -234,50 +238,35 @@ RISC-V cycles). however, there won't be enough space to store the evaluations as
 
 ### Streaming algorithm with logarithmic space
 
-Next, consider a more memory-constrained setting. We assume there is enough persistent storage (for example, on disk) to hold all evaluations of $p$ and $q$ on $\{0,1\}^n$, but not enough RAM to store the intermediate “bound” evaluation tables such as $p_{r_1}, p_{r_1,r_2}$, and so on. Alternatively, we can generate the original evaluations cheaply on the fly, but do not have space to cache all of the bound evaluations. In this **streaming** setting, we have another classic algorithm by [CMT11] that requires the prover to perform a streaming pass over the input in each round (or at least until the bound evaluations can be stored).
+We now present another classic sum-check proving algorithm, by [CMT11], that is much more memory efficient.
+The setting is the following. Assume there is enough persistent storage (for example, on disk) to hold all evaluations of $p$ and $q$ on $\{0,1\}^n$, but not enough RAM to store the intermediate “bound” evaluation values of $p_1$, $q_1$, and so on. Alternatively, we can generate the original evaluations of $p$ and $q$ cheaply on the fly, but do not have space to cache all of the bound evaluations.
 
-Fix a round $i$. The prover needs to send the degree-2 polynomial
+In this setting, the prover will need to perform a streaming pass over the original data in order to compute the univariate polynomial $s_i(X)$ for each round $i$. Recall that this polynomial is determined by its evaluations at $u \in \{0,1,2\}$:
 $$
-    s_i(X) = \sum_{(x_{i+1},\dots,x_n) \in \{0,1\}^{n-i}} p(r_1,\dots,r_{i-1}, X, x_{i+1},\dots,x_n)
+    s_i(u) = \sum_{(x_{i+1},\dots,x_n) \in \{0,1\}^{n-i}} p(r_1,\dots,r_{i-1}, X, x_{i+1},\dots,x_n)
                                            \cdot q(r_1,\dots,r_{i-1}, X, x_{i+1},\dots,x_n).
 $$
-By the multilinear-extension viewpoint and the equality polynomial introduced earlier, we can write these partially bound evaluations explicitly. Let
+By the multilinear extension formula and the equality polynomial introduced earlier, we can write these partially bound evaluations as a further sum
 $$
-    \vec{Z} = (r_1,\dots,r_{i-1}, X, x_{i+1},\dots,x_n).
+    p(r_1,\dots,r_{i-1}, u, x_{i+1},\dots,x_n) = \sum_{y \in \{0,1\}^{i-1}} \widetilde{eq}((r_1,\dots,r_{i-1}), y) \cdot p(y, u, x_{i+1},\dots,x_n),
 $$
-Then the multilinear extension formula says
-$$
-    p(\vec{Z}) = \sum_{y \in \{0,1\}^n} \widetilde{eq}(\vec{Z}, y) \cdot p(y),
-$$
-and the same holds for $q$. In other words, each term $p(r_1,\dots,r_{i-1}, X, x_{i+1},\dots,x_n)$ is a fixed linear combination of the original values $p(y)$, with weights that depend only on $(r_1,\dots,r_{i-1}, X)$ and the prefix of $y$. This means that to compute $s_i(u)$ for $u \in \{0,1,2\}$, we can make a *single pass* over the original evaluation tables of $p$ and $q$, streaming them from disk or regenerating them as needed, and maintain three running sums for $s_i(0)$, $s_i(1)$, and $s_i(2)$.
+and the same holds for $q$.
 
-What all the above math means for implementation is the following. For each round $i$, the streaming prover will:
+In other words, the value $p(r_1,\dots,r_{i-1}, u, x_{i+1},\dots,x_n)$ is just a weighted sum of the original evaluations $p(y)$. Importantly, the weight for a given $p(y)$ depends only on the prefix of $y$ (the first $i-1$ bits) and the target evaluation point $u$.
 
-- Initialize three accumulators for $s_i(0), s_i(1), s_i(2)$.
-- Stream through all $2^n$ original evaluation points $y = (y_1,\dots,y_n)$ in a fixed order.
-- For each $y$, compute its contribution to $p(r_1,\dots,r_{i-1}, u, \cdot)$ and $q(r_1,\dots,r_{i-1}, u, \cdot)$ via the equality-polynomial weights, for each $u \in \{0,1,2\}$, and update the corresponding accumulators.
-- At the end of the pass, interpolate the unique degree-2 polynomial $s_i(X)$ from its values at $X = 0, 1, 2$.
+This observation translates directly into a streaming algorithm. To compute the three required values $s_i(0), s_i(1), s_i(2)$ for round $i$, the prover can do the following:
+1.  **Initialize:** Set three accumulators for $s_i(0), s_i(1), s_i(2)$ to zero.
+2.  **Stream:** Read the original evaluation stream $p(x), q(x)$ over all $x \in \{0,1\}^n$, split into chunks of size $2^{i}$ that agrees on the suffix $x_{i+1},\dots,x_n$.
+3.  **Update:** For each chunk, compute the appropriate weights based on the current round $i$ and challenges $r_1, \dots, r_{i-1}$ for the prefix $y = (x_1,\dots,x_i)$. Add the weighted product terms to the respective accumulators.
+4.  **Interpolate:** Once the stream is finished, the accumulators hold $s_i(0), s_i(1), s_i(2)$. Use these to recover the polynomial $s_i(X)$.
 
-Crucially, we never store any bound evaluation tables: each round reuses the same underlying stream of $2^n$ values. The final asymptotic cost is therefore $O(2^n \cdot n)$ time, since we perform work proportional to the original table in each of the $n$ rounds, and $O(n)$ space, to store the current challenges and a handful of accumulators. In terms of $M = 2^n$, this is a quasilinear-time, $O(\log M)$-space prover. In practice, one can switch to the linear-time algorithm once the remaining bound tables fit in memory; this often happens before the halfway point in the protocol, so we only need to stream for the first few rounds and save roughly half of the total work.
+This method never stores any intermediate "bound" tables. Instead, every round re-reads the original $N$ values from the stream. This dramatically reduces the memory footprint to just $O(n)$ for storing the challenges and accumulators (or $O(\log N)$).
 
-<!-- Note the model: assume there is enough storage (perhaps in a hard
-drive) to store all the evaluations, but not enough storage in RAM to store the intermediate
-values. Alternatively, the evaluations can be generated cheaply on-the-fly, but not enough storage (RAM or otherwise) for the bound evaluations.
+**Cost Analysis:**
+*   **Time:** We iterate over the full stream of size $N$ for each of the $n$ rounds. The total work is $O(n \cdot N) = O(N \log N)$, making this a **quasilinear-time** algorithm.
+*   **Space:** We only store a constant number of accumulators and the $n$ random challenges, so the space complexity is $O(n) = O(\log N)$.
 
-So, we can compute from scratch every round, or at least until there is enough space to
-materialize the polynomial
-
-Indeed, we can compute from the initial evaluations since
-$$
-    s_i(X) = \sum_{\vec{x'} \in \{0,1\}^{n - i - 1}} p(r_1, \dots, r_{i-1}, X, \vec{x'}) \cdot q(r_1, \dots, r_{i-1}, X, \vec{x'}) \\
-    = \sum_{(x_{i+1},\dots,x_n) \in \{0,1\}^{n - i - 1}} (\sum_{(y_1,\dots,y_{i-1})} \widetilde{eq}(\vec{r}, \vec{y}) \cdot p(\vec{y}, X, \vec{x'})) \cdot (\sum_{(y_1,\dots,y_{i-1})} \widetilde{eq}(\vec{r}, \vec{y}) \cdot q(\vec{y}, X, \vec{x'})).
-$$
-
-This looks like a mouthful, but it actually gives us a nice algorithm to compute $s_i(u)$ for all $u
-= 0, 1, 2$ via a single pass over the stream of evaluations of $p$ and $q$. We stream, chunk by
-$2^{i-1}$ terms, then sum again over those chunked terms. (TODO: write this out more clearly)
-
-Final asymptotic: $O(2^n \cdot n)$ since we have to do work on the entire original evaluations for each of the $n$ rounds. But, we can keep the space usage down to $O(n)$ by streaming the eq-polynomial evaluations. A slight speedup in practice is possible by switching to the linear-time algorithm whenever the remaining bound polynomials fit in memory. This often happens before the mid-way point in the protocol, in which case we can save half the work (i.e. we don't have to stream for the last half of the rounds). -->
+This $O(\log N)$-space algorithm allows proving much larger statements than the linear-space approach, limited only by disk capacity or regeneration time rather than RAM. In practice, implementations often use a hybrid approach: stream for the first few rounds until the effective problem size shrinks enough to fit in memory (which happens before the halfway point in the protocol), then switch to the faster linear-time algorithm. However, this still leads to a large overhead compared to the linear-time algorithm, up to an order of magnitude for large instances (with $n \approx 30$).
 
 ## New Idea: Round Batching and its Benefits
 
