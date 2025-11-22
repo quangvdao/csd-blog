@@ -238,7 +238,7 @@ RISC-V cycles). however, there won't be enough space to store the evaluations as
 
 ### Streaming algorithm with logarithmic space
 
-We now present another classic sum-check proving algorithm, by [CMT11], that is much more memory efficient.
+We now present another classic sum-check proving algorithm, by Cormode, Mitzenmacher, and Thaler [2], that is much more memory efficient.
 The setting is the following. Assume there is enough persistent storage (for example, on disk) to hold all evaluations of $p$ and $q$ on $\{0,1\}^n$, but not enough RAM to store the intermediate “bound” evaluation values of $p_1$, $q_1$, and so on. Alternatively, we can generate the original evaluations of $p$ and $q$ cheaply on the fly, but do not have space to cache all of the bound evaluations.
 
 In this setting, the prover will need to perform a streaming pass over the original data in order to compute the univariate polynomial $s_i(X)$ for each round $i$. Recall that this polynomial is determined by its evaluations at $u \in \{0,1,2\}$:
@@ -257,18 +257,40 @@ In other words, the value $p(r_1,\dots,r_{i-1}, u, x_{i+1},\dots,x_n)$ is just a
 This observation translates directly into a streaming algorithm. To compute the three required values $s_i(0), s_i(1), s_i(2)$ for round $i$, the prover can do the following:
 1.  **Initialize:** Set three accumulators for $s_i(0), s_i(1), s_i(2)$ to zero.
 2.  **Stream:** Read the original evaluation stream $p(x), q(x)$ over all $x \in \{0,1\}^n$, split into chunks of size $2^{i}$ that agrees on the suffix $x_{i+1},\dots,x_n$.
-3.  **Update:** For each chunk, compute the appropriate weights based on the current round $i$ and challenges $r_1, \dots, r_{i-1}$ for the prefix $y = (x_1,\dots,x_i)$. Add the weighted product terms to the respective accumulators.
+3.  **Update:** For each chunk, compute the appropriate weights based on the current round $i$ and challenges $r_1, \dots, r_{i-1}$ for the prefix $y = (x_1,\dots,x_i)$. Importantly, the equality-polynomial weights can be computed on-the-fly in $O(2^i)$ time based on the challenges $r_1, \dots, r_{i-1}$. Add the weighted product terms to the respective accumulators.
 4.  **Interpolate:** Once the stream is finished, the accumulators hold $s_i(0), s_i(1), s_i(2)$. Use these to recover the polynomial $s_i(X)$.
 
 This method never stores any intermediate "bound" tables. Instead, every round re-reads the original $N$ values from the stream. This dramatically reduces the memory footprint to just $O(n)$ for storing the challenges and accumulators (or $O(\log N)$).
 
 **Cost Analysis:**
 *   **Time:** We iterate over the full stream of size $N$ for each of the $n$ rounds. The total work is $O(n \cdot N) = O(N \log N)$, making this a **quasilinear-time** algorithm.
-*   **Space:** We only store a constant number of accumulators and the $n$ random challenges, so the space complexity is $O(n) = O(\log N)$.
+*   **Space:** This is only $O(n) = O(\log N)$ since we only need to store the $n$ challenges and the three accumulators over all rounds.
 
 This $O(\log N)$-space algorithm allows proving much larger statements than the linear-space approach, limited only by disk capacity or regeneration time rather than RAM. In practice, implementations often use a hybrid approach: stream for the first few rounds until the effective problem size shrinks enough to fit in memory (which happens before the halfway point in the protocol), then switch to the faster linear-time algorithm. However, this still leads to a large overhead compared to the linear-time algorithm, up to an order of magnitude for large instances (with $n \approx 30$).
 
 ## New Idea: Round Batching and its Benefits
+
+Both the linear-time and the CMT streaming algorithm share a common structure: they proceed **round-by-round**. For each round $i$, the prover computes a univariate polynomial $s_i(X)$, sends it, waits for the verifier's challenge $r_i$, and only then computes the polynomial $s_{i+1}(X)$ for the next round.
+
+What if we could break this sequential dependency? Instead of computing just one round at a time, could the prover compute, say, rounds $1$ and $2$ simultaneously? Or any number of consecutive rounds at once?
+
+This is the idea behind **round batching**, a technique that is recently introduced in my work [6] and the work of Bajewa et al. [5]. The idea turns out to bring efficiency gains for both algorithms above, especially in the setting of proving program execution. I will first discuss the mechanics of round batching, and then discuss the benefits in more detail.
+
+At first glance, this seems impossible: the prover cannot know the claim for round 2 without knowing the challenge $r_1$ from round 1. However, the prover can compute a response that is **oblivious** to the future challenges. This is achieved by computing a _bivariate_ polynomial $s(X_1, X_2)$ that suffices to answer both rounds 1 and 2.
+
+More generally, if we want to compute $w$ consecutive rounds at once, starting at round $i$, the prover will need to compute the $w$-variate polynomial
+$$
+    s(X_1, \dots, X_w) = \sum_{x' \in \{0,1\}^{n-w-i}} p(r_1, \dots, r_{i-1}, X_1, \dots, X_w, x') \cdot q(r_1, \dots, r_{i-1}, X_1, \dots, X_w, x').
+$$
+Once the prover has computed this polynomial, the sum-check protocol for these next $w$ rounds are effectively the same as doing sum-check over the $w$-variate polynomial $s$ itself:
+$$
+\sum_{x \in \{0,1\}^w} s(x) = c_i.
+$$
+Since $w$ is often much smaller than $n$, this sum-check instance is trivial to prove. The difficulty is in 
+
+The key insight is that the prover can compute this polynomial without knowing the future challenges. Instead, it can compute a polynomial that is **oblivious** to the future challenges. This is achieved by computing a $w$-variate polynomial that is independent of the future challenges.
+
+
 
 The standard sum-check prover binds one variable per round to a random challenge from a large field. This makes the first round cheap (inputs are still “small,” e.g., 64-bit), but after that, the prover’s arithmetic immediately moves into the large field, which is much slower.
 
