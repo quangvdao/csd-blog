@@ -2,7 +2,7 @@
 # The title of your blogpost. No sub-titles are allowed, nor are line-breaks.
 title = "Algorithms for the Sum-check Protocol"
 # Date must be written in YYYY-MM-DD format. This should be updated right before the final PR is made.
-date = 2025-11-14
+date = 2025-11-24
 
 [taxonomies]
 # Keep any areas that apply, removing ones that don't. Do not add new areas!
@@ -32,17 +32,18 @@ committee = [
 2. Word count should be around 2-3k words, but not a strict limit
 3. Everything should be understandable, well motivated, details laid out clearly -->
 
+<!-- This blog post is a glimpse into these exciting developments. It turns out that the fastest of such zkVMs, such as Jolt, derive its efficiency from a classical protocol first introduced in 1992, called the sum-check protocol. I will give an introduction to the sum-check protocol, detail well-known algorithms for the sum-check prover, and introduce a new technique that speeds up the sum-check prover in settings relevant to zkVMs. -->
+
 # The Need for Verifiability
 
-We increasingly rely on computational results we cannot feasibly verify ourselves. The barrier to verification comes in two forms. First, the computation may involve private data that cannot be shared, such as financial audits, medical studies, and proprietary algorithms. Second, even when data is public, re-executing the computation may be prohibitively expensive: large scientific analyses might require days of cluster time on terabytes of data. How can we trust that such computations were performed correctly?
+We increasingly rely on computational results that we cannot feasibly verify ourselves. The barrier to verification comes in two forms. First, the computation may involve private data that cannot be shared, such as financial audits, medical studies, and proprietary algorithms. Second, even when data is public, re-executing the computation may be prohibitively expensive: large scientific analyses might require days of cluster time on terabytes of data. How can we trust that such computations were performed correctly?
 
-Cryptographic proof systems solve this dilemma. Such protocols let an untrusted prover, who possesses some private data, convince a verifier that the data satisfies a public property. For example, this could include proving that you are over 18 or that your account has sufficient balance, without revealing anything else such as your full date of birth, or your financial history. Furthermore, the proofs or certificates produced by such systems are relative short, and can be verified in a matter of milliseconds, rather than the days or weeks required to re-execute the computation.
+Cryptographic proof systems solve this dilemma. Such protocols let an untrusted prover, who possesses some private data, convince a verifier that the data satisfies a public property. For example, this could include proving that you are over 18 or that your account has sufficient balance, without revealing anything else such as your full date of birth, or your financial history. Furthermore, the proofs or certificates produced by such systems are relative short, and can be verified in a matter of milliseconds, rather than the potential days or weeks required to re-execute the computation.
 
-Once purely theoretical, cryptographic proof systems are now practical enough for applications such as making blockchains scalable and private. Many teams are now racing to build the most generic cryptographic proof systems, called _zero-knowledge virtual machines (zkVMs)_: virtual computers that can run any program (compiled to a common ISA like RISC-V) and produce a certificate proving its correct execution. This is a game-changer because it allows developers to prove any existing program without modification. Previously, creating a proof required manually translating program logic into a specialized, low-level language—a process that is slow, expensive, and prone to subtle bugs. The state of the art is impressive: modern zkVMs can prove over a million RISC-V execution cycles per second on a 32-core server.
+Over the past decade, cryptographic proof systems have matured from theoretical curiosities into practical tools used for a variety of applications, including age verification [cite google] and blockchain scalability [cite ethproofs]. To make developing proof systems for each application easier, the community is converging on a common framework: _zero-knowledge virtual machines (zkVMs)_. A zkVM is a virtual computer that can run any 
+program (compiled to a common instruction-set architecture like RISC-V) and produce a certificate proving that the execution is correct, allowing developers to write programs in high-level languages like Rust or Python, compile them to RISC-V, and prove their execution correctness, all without needing deep cryptographic expertise. As these systems see wider adoption, the research focus has shifted to optimizing their underlying efficiency.
 
-The fastest of these zkVMs, such as Jolt, derive their efficiency from a classical protocol from 1992: the sum-check protocol. In this blog post, I will introduce the sum-check protocol, detail well-known algorithms for its prover, and present a new technique that speeds up the prover in settings relevant to zkVMs.
-
-<!-- This blog post is a glimpse into these exciting developments. It turns out that the fastest of such zkVMs, such as Jolt, derive its efficiency from a classical protocol first introduced in 1992, called the sum-check protocol. I will give an introduction to the sum-check protocol, detail well-known algorithms for the sum-check prover, and introduce a new technique that speeds up the sum-check prover in settings relevant to zkVMs. -->
+State-of-the-art zkVMs, such as Jolt [cite jolt], derive their performance from a classical protocol from 1992: the sum-check protocol. In fact, sum-check is so ubiquitous in Jolt that it has become a bottleneck, taking up about 70% of the total proving time for proving large programs. In this blog post, I will introduce the sum-check protocol, detail well-known algorithms for its prover, and present a new technique that speeds up the prover in settings relevant to zkVMs.
 
 ## Sum-Check Protocol Overview
 
@@ -54,7 +55,7 @@ $$
     \sum_{x_1 \in H_1, \dots, x_n \in H_n} p(x_1,\dots,x_n) = c,    
 $$
 for some evaluation domains $H_1, \dots, H_n \subseteq \mathbb{F}$ and a claimed value $c \in \mathbb{F}$.
-In most applications, and for the remainder of this blog post, we restrict to the Boolean hypercube, i.e., $H_1 = \dots = H_n = \{0,1\}$.
+In most applications, and for the remainder of this blog post, we restrict to the _Boolean hypercube_, which is the domain $H_1 = \dots = H_n = \{0,1\}$.
 
 The verifier knows $p$, or at least has oracle access to evaluations of $p$ at points of its choice, but wants to use this query access as little as possible. Naively, the verifier could evaluate $p$ on all $2^n$ points of $\{0,1\}^n$ and sum the results, which takes work on the order of $O(2^n)$. The key idea of sum-check is that, by interacting with an untrusted prover who supplies additional "auxiliary" polynomials, the verifier can reduce the work of checking the original claim to checking a related claim about $p$ at a single randomly chosen point.
 
@@ -69,24 +70,24 @@ The verifier checks precisely these two conditions, and rejects if either fails.
 
 If both checks pass, the verifier samples a random challenge $r_1 \gets \mathbb{F}$ and sends it to the prover.
 The point of this random challenge is to "pin down" the prover’s behavior at a point of the verifier’s choice:
-if the prover has lied about $s_1(X)$, then with high probability (at most $d / |\mathbb{F}$|)
+if the prover has lied about $s_1(X)$, then with high probability (at most $d / \lvert \mathbb{F} \rvert$)
 the fake $s_1$ will disagree with the true polynomial at $X = r_1$.
 If we set the finite field size to be sufficiently large, e.g., at least $128$ bits for cryptographic security, then this probability is truly negligible.
 
 After this first round of interaction, the prover and verifier have effectively reduced the problem to showing that
 $$
-    \sum_{(x_2,\dots, x_n) \in \{0,1\}^{n-1}} p_{r_1}(x_2, \dots, x_n) = c_1,
+    \sum_{(x_2,\dots, x_n) \in \{0,1\}^{n-1}} p_1(x_2, \dots, x_n) = c_1,
 $$
-where we define $p_{r_1}(x_2,\dots,x_n) := p(r_1, x_2,\dots,x_n)$ and $c_1 := s_1(r_1)$.
-That is, we have "fixed" the first variable to $r_1$ and now need to verify a new sum-check claim in $n-1$
+where we define $p_1(x_2,\dots,x_n) := p(r_1, x_2,\dots,x_n)$ and $c_1 := s_1(r_1)$.
+That is, we have "bound" the first variable to $r_1$ and now reduce to a new sum-check instance in $n-1$
 variables.
 The protocol then repeats the same pattern on this new instance:
 in the second round, the prover sends a univariate polynomial
 $$
-    s_2(X) = \sum_{(x_3,\dots,x_n) \in \{0,1\}^{n-2}} p_{r_1}(X, x_3,\dots,x_n),
+    s_2(X) = \sum_{(x_3,\dots,x_n) \in \{0,1\}^{n-2}} p_1(X, x_3,\dots,x_n),
 $$
-the verifier checks the degree and a simple consistency relation analogous to $s_1(0) + s_1(1) = c_1$,
-samples a fresh random $r_2 \gets \mathbb{F}$, and so on.
+the verifier again checks the degree and the equation $s_2(0) + s_2(1) = c_1$,
+samples a fresh random $r_2 \gets \mathbb{F}$, sets the new claim $c_2 := s_2(r_2)$, and continue.
 
 After $n$ rounds, all variables have been fixed to random challenges $r_1,\dots,r_n \in \mathbb{F}$,
 and the verifier is left with a single claim of the form
@@ -97,7 +98,7 @@ that it can check directly using its oracle access to $p$.
 
 What properties does the sum-check protocol satisfy? The first is **completeness**. If the original sum claim is correct and the prover follows the rules, then every round’s check passes, and at the end we really do have $p(r_1,\dots,r_n) = c_n$, so the verifier accepts.
 
-The more interesting property is **soundness**, which is about what happens when the original claim is actually false. In that case, no matter how a (possibly malicious) prover behaves, at some round it must send a polynomial that is not the "right" one. Two different low-degree polynomials over a field can only agree on a small fraction of inputs (also known as the Schwartz–Zippel lemma); thus, a random challenge $r_i$ will land on a point where they differ except with probability at most $d / |\mathbb{F}|$. Thus, even when the claim is wrong, a cheating prover can make the verifier accept only with negligible probability.
+The more interesting property is **soundness**, which is about what happens when the original claim is actually false. In that case, no matter how a (possibly malicious) prover behaves, at some round it must send a polynomial that is not the "right" one. Two different low-degree polynomials over a field can only agree on a small fraction of inputs (a fact known as the Schwartz–Zippel lemma); thus, a random challenge $r_i$ will land on a point where they differ except with probability at most $d / \lvert \mathbb{F}\rvert$. Thus, even when the claim is wrong, a cheating prover can make the verifier accept only with negligible probability.
 
 ## Brief Interlude on Multilinear Polynomials
 
@@ -107,57 +108,51 @@ we first transform the computation trace—such as the values of all registers o
 intermediate constraint values—into polynomials, and then we use sum-check to reason about those polynomials instead of the
 original computation.
 
-The most common arithmetization method used in modern proof systems is to package these traces and constraint tables into
+The arithmetization method used in sum-check-based proof systems is to turn these traces and constraint tables into
 **multilinear polynomials**.
 A multilinear polynomial is a multivariate polynomial where each variable appears with degree at most $1$.
 For instance,
 $$
     q(X_1, X_2, X_3) = 3X_1 X_3 + 2X_2 + 5
 $$
-is multilinear, while $X_1^2 + X_2$ is not. A key fact is that a multilinear polynomial in $n$ variables is uniquely
-determined by its values on the $2^n$ points of the Boolean hypercube $\{0,1\}^n$. This means we can equivalently think
-of a length-$2^n$ vector as giving the evaluations of some multilinear polynomial on $\{0,1\}^n$.
+is multilinear, while $X_1^2 + X_2$ is not. A key fact is that a multilinear polynomial in $n$ variables is _uniquely_
+determined by its values on the $2^n$ points of the **Boolean hypercube** $\{0,1\}^n$. This gives a natural encoding of a length-$2^n$ vector $\mathbf{v}=(v_0,\dots,v_{2^n-1})$ over the finite field $\mathbb{F}$.
 
-This correspondence can be made precise. Given a function $p : \{0,1\}^n \to \mathbb{F}$ (for example, a vector of trace or constraint values indexed by
-$y \in \{0,1\}^n$), its **multilinear extension** is the unique multilinear polynomial $\widetilde{p}(X_1,\dots,X_n)$
-that agrees with $p$ on all Boolean points. One convenient way to write this extension is
+We can also make this encoding precise with a mathematical formula. Given a function $p : \{0,1\}^n \to \mathbb{F}$ (for example, a vector of trace or constraint values indexed by
+$y \in \{0,1\}^n$), its **multilinear extension** is the _unique_ multilinear polynomial $\widetilde{p}(X_1,\dots,X_n)$
+that agrees with $p$ on all Boolean points. The formula for the multilinear extension is as follows:
 $$
     \widetilde{p}(X_1,\dots, X_n) = \sum_{y \in \{0,1\}^n} \widetilde{eq}(\vec{X}, y) \cdot p(y),
 $$
-where the "equality" polynomial $\widetilde{eq}$ is defined by
+where the **equality polynomial** $\widetilde{eq}$ is defined by
 $$
     \widetilde{eq}(\vec{X}, \vec{Y}) = \prod_{i=1}^n \big((1 - X_i)(1 - Y_i) + X_i Y_i\big).
 $$
-For $\vec{x}, \vec{y} \in \{0,1\}^n$, this satisfies $\widetilde{eq}(\vec{x}, \vec{y}) = 1$ if $\vec{x} = \vec{y}$
-and $0$ otherwise, so each term in the sum "picks out" the value $p(y)$ at exactly one point on the hypercube.
+You should think of $\widetilde{eq}$ as the indicator function of the equality relation on the Boolean hypercube. Indeed, for any $\vec{x}, \vec{y} \in \{0,1\}^n$, we have $\widetilde{eq}(\vec{x}, \vec{y}) = 1$ if $\vec{x} = \vec{y}$
+and $0$ otherwise. Plugging this into the multilinear extension formula, we can see that each term in the sum "picks out" the value $p(y)$ at exactly one point on the hypercube, thanks to the equality polynomial $\widetilde{eq}(\vec{X}, y)$.
 
-As a tiny example of a multilinear extension in one variable, imagine a 2-cycle program where a register holds values
-$(a_0, a_1)$ over time. We can view this as a function $p : \{0,1\} \to \mathbb{F}$ with $p(0) = a_0$ and $p(1) = a_1$.
-Its multilinear extension is the unique degree-1 polynomial
-$$
-    \widetilde{p}(X) = a_0 \cdot (1 - X) + a_1 \cdot X,
-$$
-which agrees with the original values at $X = 0$ and $X = 1$, but can also be evaluated at non-Boolean points such as
-$X = 1/2$, or indeed any point in the finite field $\mathbb{F}$. In exactly the same way, an $n$-dimensional table of
-values can be turned into a multilinear polynomial in $n$ variables.
-
-This multilinear extension viewpoint is what lets us turn discrete objects like execution traces and constraint
-tables into low-degree polynomials, which are precisely the objects that sum-check knows how to handle.
+As a small example, the $2$-variate multilinear extension is given by
+$$ \begin{aligned} p(X_1, X_2) = p(0,0) \cdot (1 - X_1)(1 - X_2) &+ p(0,1) \cdot (1 - X_1)X_2 \\ +\; p(1,0) \cdot X_1(1 - X_2)& + p(1,1) \cdot X_1 X_2.
+\end{aligned}$$
 
 ### Example: Arithmetizing a Batched Zero-Check
 
-To see how this connects back to sum-check, consider a very simple proof goal: you want to prove that **four constraints
-all vanish**. Label the four points of $\{0,1\}^2$ as
-$(0,0), (0,1), (1,0), (1,1)$, and suppose you have two functions
+Now that we have seen multilinear polynomials, let's see how they allow us to turn common constraints into sum-check instances.
+
+Consider a scenario where we have two columns of data, $A$ and $B$, each of length $N=4$. We want to prove that the element-wise product of these columns is zero. That is, if $A = [a_0, a_1, a_2, a_3]$ and $B = [b_0, b_1, b_2, b_3]$, we claim that
 $$
-    p, q : \{0,1\}^2 \to \mathbb{F}
+    a_i \cdot b_i = 0 \quad \text{for all } i \in \{0, 1, 2, 3\}.
 $$
-such that you want to prove
+This **batched zero-check** pattern appears everywhere in proving program execution. For example, given two input registers holding values $x$ and $y$, and an output register holding value $z$, we can enforce that all addition instructions are correctly performed by checking that the formula
+$$
+    S_{\text{ADD}}(i) \cdot (z(i) - (x(i) + y(i))) = 0
+$$
+holds for all cycles $i$. Here, $S_{\text{ADD}}$ is a selector that is $1$ if the instruction is ADD and $0$ otherwise.
+
+To use sum-check, we view the indices as points on the boolean hypercube $\{0,1\}^2$ and the columns as evaluations of multilinear polynomials. Let $p(x_1, x_2)$ and $q(x_1, x_2)$ be the multilinear extensions of $A$ and $B$ respectively. Then our claim becomes:
 $$
     p(x_1, x_2) \cdot q(x_1, x_2) = 0 \quad \text{for all } (x_1, x_2) \in \{0,1\}^2.
 $$
-You can think of each pair $p(x_1, x_2), q(x_1, x_2)$ as encoding one local constraint, so this is just a
-**batched zero-check** for four constraints.
 
 This pointwise condition can be bundled into a single sum over the hypercube. Define
 $$
@@ -167,36 +162,45 @@ and consider the claim that
 $$
     g(x_1, x_2) = 0 \quad \text{for all } (x_1, x_2) \in \{0,1\}^2.
 $$
-Equivalently, the multilinear extension $\widetilde{g}$ should vanish on all Boolean points. Using the equality
-polynomial, we can package this as the single identity
+This claim is equivalent to saying that the multilinear extension $\widetilde{g}$ should vanish on all Boolean points. In other words,
 $$
-    \sum_{(x_1, x_2) \in \{0,1\}^2} \widetilde{eq}\big((r_1, r_2), (x_1, x_2)\big) \cdot p(x_1, x_2) \cdot q(x_1, x_2) = 0
+    \sum_{(x_1, x_2) \in \{0,1\}^2} \widetilde{eq}\big((X_1, X_2), (x_1, x_2)\big) \cdot p(x_1, x_2) \cdot q(x_1, x_2) = 0
 $$
-for a randomly chosen point $(r_1, r_2) \in \mathbb{F}^2$.
-The left-hand side is exactly the evaluation $\widetilde{g}(r_1, r_2)$ of the multilinear extension of $g$
-at the random point $(r_1, r_2)$. So, instead of checking four separate equalities $g(x) = 0$ at the cube points,
-we check a **single** polynomial identity at a random point.
-
-This is now in the right shape for sum-check: it is a sum over $(x_1, x_2) \in \{0,1\}^2$ of a polynomial in
-$x_1, x_2, r_1, r_2$. In larger systems, we do the same thing with many more variables and many more constraints:
-pointwise "zero checks" $p(x) \cdot q(x) = 0$ over a hypercube are encoded as a single sum-check instance over
-a polynomial built from the equality polynomial and the multilinear encodings of $p$ and $q$.
+as multilinear polynomials. We now reduce this to a sum-check instance by sampling a random point $(r_1, r_2) \in \mathbb{F}^2$ and checking that the polynomial vanishes at this point:
+$$
+    \sum_{(x_1, x_2) \in \{0,1\}^2} \widetilde{eq}\big((r_1, r_2), (x_1, x_2)\big) \cdot p(x_1, x_2) \cdot q(x_1, x_2) = 0.
+$$
+If this sum-check claim is correct, then the original multilinear polynomial $\widetilde{g}$ is identically zero, except with negligible probability $2 / \lvert \mathbb{F} \rvert$. So, instead of checking four separate equalities $g(x) = 0$ at the cube points,
+we check a **single** polynomial identity at a random point. Our exposition generalizes easily to an arbitrary $2^n$-batched zero-check, which is converted into a $n$-variable sum-check instance.
 
 ## Existing Algorithms for Sum-Check
 
-We now turn to algorithms for the prover. We will focus on the most common setting in modern proof systems: sum-check over a low-degree function applied to one or more multilinear polynomials. This captures many real applications, such as the batched zero-check we saw earlier. Concretely, consider the case of a product of two multilinear polynomials
+We now turn to algorithms for the prover. We will focus on the most common setting in modern proof systems: sum-check over a low-degree function applied to one or more multilinear polynomials. This captures many real applications, such as the batched zero-check we saw earlier. To simplify the exposition, we further specialize to the case of a product of two multilinear polynomials
 $$
     \sum_{x \in \{0,1\}^n} p(x) \cdot q(x) = c,
 $$
-where $p, q : \{0,1\}^n \to \mathbb{F}$ are given by their evaluations on the Boolean hypercube. This is exactly the kind of batched zero-check we saw earlier, just written as a single large sum.
+where $p, q : \{0,1\}^n \to \mathbb{F}$ are given by their evaluations on the Boolean hypercube. The algorithms we cover straightfowardly generalize to the product of arbitrary number of multilinear polynomials.
 
 ### Linear-time algorithm
 
-The first prover algorithm we consider, following Vu, Setty, Blumberg, and Walfish [4] and Thaler [3], runs in linear time in the number of points but also uses linear space. In the first round of sum-check, the prover computes and sends the univariate polynomial
+The first prover algorithm we consider, following Vu, Setty, Blumberg, and Walfish [4] and Thaler [3], runs in linear time in the number of summands (which is $N = 2^n$). This algorithm is key to the efficiency of sum-check, as we can prove a statement (like a batched zero-check) with only a constant-factor computational overhead.
+
+Recall that in the first round of sum-check, the prover needs to compute and send the univariate polynomial
 $$
     s_1(X) = \sum_{(x_2,\dots,x_n) \in \{0,1\}^{n-1}} p(X, x_2,\dots,x_n) \cdot q(X, x_2,\dots,x_n).
 $$
-Since $s_1(X)$ has degree at most $2$, it is completely determined by its three values $s_1(0), s_1(1), s_1(2)$. The prover can compute these in a single pass over the $2^n$ evaluations of $p$ and $q$: for each point $(x_1,\dots,x_n)$, it updates the running sums for $s_1(0)$, $s_1(1)$, or $s_1(2)$ depending on the value of $x_1$.
+Since $s_1(X)$ has degree at most $2$, it is completely determined by its evaluations on three distinct points, which we may choose to be $s_1(0), s_1(1)$, and $s_1(2)$. The prover can compute these in a single pass over the $2^n$ evaluations of $p$ and $q$. For each point $x' = (x_2,\dots,x_n)$, given evaluations of $p$ and $q$ at $(0,x')$ and $(1,x')$, the prover adds the following to the running sums $s_1(0)$, $s_1(1)$, $s_1(2)$:
+$$
+    \begin{cases}
+    p(0, x') \cdot q(0, x'),\\
+    p(1, x') \cdot q(1, x'),\\
+    p(2, x') \cdot q(2, x'),
+    \end{cases}
+$$
+In the above, the last product can be computed by relying on the fact that $p$ and $q$ are linear in the first variable:
+$$
+ p(2, x') \cdot q(2, x') = (2 \cdot p(1, x') - p(0, x')) \cdot (2 \cdot q(1, x') - q(0, x')).
+$$
 
 After the verifier sends a random challenge $r_1$, the prover needs the “bound” polynomials
 $$
@@ -228,9 +232,9 @@ Problem: requires linear space as well. Quickly grows untenable as the number of
 assume the trace still fits in memory (which is the case when proving up to one hundred million
 RISC-V cycles). however, there won't be enough space to store the evaluations as in the linear-time algorithm -->
 
-### Log-space / streaming algorithm
+### Streaming algorithm with logarithmic space
 
-Next, consider a more memory-frugal model. We assume there is enough persistent storage (for example, on disk) to hold all evaluations of $p$ and $q$ on $\{0,1\}^n$, but not enough RAM to store the intermediate “bound” evaluation tables such as $p_{r_1}, p_{r_1,r_2}$, and so on. Alternatively, we can generate the original evaluations cheaply on the fly, but do not have space to cache any of the bound evaluations. In this setting, the prover recomputes what it needs from scratch in each round instead of materializing smaller tables.
+Next, consider a more memory-constrained setting. We assume there is enough persistent storage (for example, on disk) to hold all evaluations of $p$ and $q$ on $\{0,1\}^n$, but not enough RAM to store the intermediate “bound” evaluation tables such as $p_{r_1}, p_{r_1,r_2}$, and so on. Alternatively, we can generate the original evaluations cheaply on the fly, but do not have space to cache all of the bound evaluations. In this **streaming** setting, we have another classic algorithm by [CMT11] that requires the prover to perform a streaming pass over the input in each round (or at least until the bound evaluations can be stored).
 
 Fix a round $i$. The prover needs to send the degree-2 polynomial
 $$
@@ -275,7 +279,7 @@ $2^{i-1}$ terms, then sum again over those chunked terms. (TODO: write this out 
 
 Final asymptotic: $O(2^n \cdot n)$ since we have to do work on the entire original evaluations for each of the $n$ rounds. But, we can keep the space usage down to $O(n)$ by streaming the eq-polynomial evaluations. A slight speedup in practice is possible by switching to the linear-time algorithm whenever the remaining bound polynomials fit in memory. This often happens before the mid-way point in the protocol, in which case we can save half the work (i.e. we don't have to stream for the last half of the rounds). -->
 
-## New Idea: Delayed Binding and its Benefits
+## New Idea: Round Batching and its Benefits
 
 The standard sum-check prover binds one variable per round to a random challenge from a large field. This makes the first round cheap (inputs are still “small,” e.g., 64-bit), but after that, the prover’s arithmetic immediately moves into the large field, which is much slower.
 
