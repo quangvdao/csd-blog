@@ -276,19 +276,31 @@ What if we could break this sequential dependency? Instead of computing just one
 
 This is the idea behind **round batching**, a technique that is recently introduced in my work [6] and the work of Bajewa et al. [5]. The idea turns out to bring efficiency gains for both algorithms above, especially in the setting of proving program execution. I will first discuss the mechanics of round batching, and then discuss the benefits in more detail.
 
-At first glance, this seems impossible: the prover cannot know the claim for round 2 without knowing the challenge $r_1$ from round 1. However, the prover can compute a response that is **oblivious** to the future challenges. This is achieved by computing a _bivariate_ polynomial $s(X_1, X_2)$ that suffices to answer both rounds 1 and 2.
+At first glance, this proposal seems impossible: the prover cannot know the claim for round 2 without knowing the challenge $r_1$ from round 1. The key observation is that the prover can compute a response that is **oblivious** to the future challenges. This is achieved by computing a _bivariate_ polynomial
+$$
+    s(X_1, X_2) = \sum_{x' \in \{0,1\}^{n-2}} p(X_1, X_2, x') \cdot q(X_1, X_2, x')
+$$
+that suffices to answer both rounds 1 and 2. Indeed, the first round polynomial $s_1(X_1)$ is equal to $s(X_1, 0) + s(X_1, 1)$, and once the prover receives the first challenge $r_1$, the second round polynomial $s_2(X_2)$ is equal to $s(r_1, X_2)$.
+
 
 More generally, if we want to compute $w$ consecutive rounds at once, starting at round $i$, the prover will need to compute the $w$-variate polynomial
 $$
     s(X_1, \dots, X_w) = \sum_{x' \in \{0,1\}^{n-w-i}} p(r_1, \dots, r_{i-1}, X_1, \dots, X_w, x') \cdot q(r_1, \dots, r_{i-1}, X_1, \dots, X_w, x').
 $$
-Once the prover has computed this polynomial, the sum-check protocol for these next $w$ rounds are effectively the same as doing sum-check over the $w$-variate polynomial $s$ itself:
+Once the prover has computed this polynomial, the next $w$ rounds of the sum-check protocol reduces to doing sum-check over the $w$-variate polynomial $s$ itself:
 $$
-\sum_{x \in \{0,1\}^w} s(x) = c_i.
+\sum_{x \in \{0,1\}^w} s(x) = c_i,
 $$
-Since $w$ is often much smaller than $n$, this sum-check instance is trivial to prove. The difficulty is in 
+as we saw in our example above with $i=1$ and $w=2$.
 
-The key insight is that the prover can compute this polynomial without knowing the future challenges. Instead, it can compute a polynomial that is **oblivious** to the future challenges. This is achieved by computing a $w$-variate polynomial that is independent of the future challenges.
+Since $w$ is often much smaller than $n$, this sum-check instance is trivial to prove. The main cost is in computing $s(X_1, \dots, X_w)$ itself. Since $s$ is a **multi-quadratic** polynomial (having degree at most $2$ in each variable), it is completely determined by its evaluations on the $\{0,1,2\}^w$ grid. For instance, if $w = 2$, we can compute one of these evaluations (say $s(1, 2)$) as
+$$
+\begin{aligned}
+    s(1, 2) &= \sum_{x' \in \{0,1\}^{n-2}} p(r_1, \dots, r_{i-1}, 1, 2, x') \cdot q(r_1, \dots, r_{i-1}, 1, 2, x') \\
+    &= \sum_{x' \in \{0,1\}^{n-2}} (2 \cdot p(r_1, \dots, r_{i-1}, 1, 1, x') - p(r_1, \dots, r_{i-1}, 1, 0, x')) \\
+    &\qquad\qquad \cdot (2 \cdot q(r_1, \dots, r_{i-1}, 1, 1, x') - q(r_1, \dots, r_{i-1}, 1, 0, x')).
+\end{aligned}
+$$
 
 
 
