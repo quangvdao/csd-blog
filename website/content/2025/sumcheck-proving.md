@@ -189,11 +189,11 @@ $$
 $$
 Since \\( s_1(X) \\) has degree at most \\( 2 \\), it is completely determined by its evaluations on three distinct points, which we may choose to be \\( s_1(0), s_1(1) \\), and \\( s_1(2) \\). The prover can compute these in a single pass over the \\( 2^n \\) evaluations of \\( p \\) and \\( q \\). For each point \\( x' = (x_2,\dots,x_n) \\), given evaluations of \\( p \\) and \\( q \\) at \\( (0,x') \\) and \\( (1,x') \\), the prover adds the following to the running sums \\( s_1(0) \\), \\( s_1(1) \\), \\( s_1(2) \\):
 $$
-    \begin{cases}
-    p(0, x') \cdot q(0, x'),\\
-    p(1, x') \cdot q(1, x'),\\
-    p(2, x') \cdot q(2, x'),
-    \end{cases}
+    % \begin{cases}
+    p(0, x') \cdot q(0, x'),\quad
+    p(1, x') \cdot q(1, x'),\quad
+    p(2, x') \cdot q(2, x').
+    % \end{cases}
 $$
 In the above, the last product can be computed by relying on the fact that \\( p \\) and \\( q \\) are linear in the first variable:
 $$
@@ -206,10 +206,8 @@ $$
     q_{1}(x_2,\dots,x_n) := q(r_1, x_2,\dots,x_n)
 $$
 in order to continue the protocol on \\( n-1 \\) variables. The linear-time algorithm explicitly materializes the evaluations of \\( p_{1} \\) and \\( q_{1} \\) on \\( \\{0,1\\}^{n-1} \\) by making another pass over the original table and writing out two new vectors of evaluations, each of size \\( 2^{n-1} \\). The update formula is
-$$
-    p_{1}(x_2,\dots,x_n) = (1 - r_1) \cdot p(0, x_2,\dots,x_n) + r_1 \cdot p(1, x_2,\dots,x_n), \\\
-    q_{1}(x_2,\dots,x_n) = (1 - r_1) \cdot q(0, x_2,\dots,x_n) + r_1 \cdot q(1, x_2,\dots,x_n).
-$$
+$$ p_{1}(x_2,\dots,x_n) = (1 - r_1) \cdot p(0, x_2,\dots,x_n) + r_1 \cdot p(1, x_2,\dots,x_n),$$
+$$q_{1}(x_2,\dots,x_n) = (1 - r_1) \cdot q(0, x_2,\dots,x_n) + r_1 \cdot q(1, x_2,\dots,x_n).$$
 
 In each subsequent round \\( i = 2, 3, \dots, n \\), the prover repeats the same pattern on these smaller vectors of evaluations to compute \\( s_i \\), then binds the next challenge \\( r_i \\) and shrinks the vectors of evaluations again, and so on.
 
@@ -278,11 +276,12 @@ as we saw in our example above with \\( i=1 \\) and \\( w=2 \\).
 
 Since \\( w \\) is often much smaller than \\( n \\), this sum-check instance is trivial to prove. The main cost is in computing \\( s(X_1, \dots, X_w) \\) itself. Since \\( s \\) is a **multi-quadratic** polynomial (having degree at most \\( 2 \\) in each variable), it is completely determined by its evaluations on the \\( \\{0,1,2\\}^w \\) grid. For instance, if \\( w = 2 \\), we can compute one of these evaluations (say \\( s(1, 2) \\)) as
 $$
-\begin{aligned}
-    s(1, 2) &= \sum_{x' \in \\{0,1\\}^{n-2}} p(r_1, \dots, r_{i-1}, 1, 2, x') \cdot q(r_1, \dots, r_{i-1}, 1, 2, x') \\\
-    &= \sum_{x' \in \\{0,1\\}^{n-2}} (2 \cdot p(r_1, \dots, r_{i-1}, 1, 1, x') - p(r_1, \dots, r_{i-1}, 1, 0, x')) \\\
-    &\qquad\qquad \cdot (2 \cdot q(r_1, \dots, r_{i-1}, 1, 1, x') - q(r_1, \dots, r_{i-1}, 1, 0, x')).
-\end{aligned}
+    s(1, 2) = \sum_{x' \in \\{0,1\\}^{n-2}} p(r_1, \dots, r_{i-1}, 1, 2, x') \cdot q(r_1, \dots, r_{i-1}, 1, 2, x') $$
+$$
+    \qquad\qquad\quad = \sum_{x' \in \\{0,1\\}^{n-2}} (2 \cdot p(r_1, \dots, r_{i-1}, 1, 1, x') - p(r_1, \dots, r_{i-1}, 1, 0, x'))
+$$
+$$
+    \qquad\qquad\qquad \cdot (2 \cdot q(r_1, \dots, r_{i-1}, 1, 1, x') - q(r_1, \dots, r_{i-1}, 1, 0, x')).
 $$
 
 **The apparent cost.** At first glance, round batching seems to be strictly slower. In the round-by-round sum-check algorithms (whether linear-time or streaming), we only need to compute \\( 3 \\) evaluations of a quadratic polynomial every round (or \\( d+1 \\) evaluations for a general sum-check instance over a degree-\\( d \\) product of multilinears). With round batching of window \\( w \\), we need to compute \\( 3^w \\) (or \\( (d+1)^w \\) in the general case) evaluations over the \\( w \\) rounds. If we had computed round-by-round evaluations instead, this number is only \\( w \cdot (d+1) \\). The gap between \\( (d+1)^w \\) and \\( w \cdot (d+1) \\) grows very quickly - for instance, with \\( d = 2 \\) and \\( w = 3 \\), we are computing **three** times as many evaluations by batching three rounds together. Why do we even bother to explore this approach?
@@ -293,13 +292,17 @@ The key insight is that the cost of computing evaluations is not equal across al
 
 **Small-field arithmetic at the start.** In zkVMs, the underlying data (register values, memory contents) are small—typically 64-bit integers—while the proof system operates over a large, often 128-bit or even 256-bit field. Arithmetic with 64-bit integers are about **10-50x** faster compared to generic field multiplication.
 
-For sum-check involving these small values, the prover enjoys a speedup in the first round, since the original evaluations \\( \left( p(x), q(x)\right)_{x \in \\{0,1\\}^n} \\) are small. However, this speedup goes away in later rounds, since the bound evaluations \\( \left( p(r_1, \dots, r_{i-1},x), q(r_1, \dots, r_{i-1}, x)\right)_{x \in \\{0,1\\}^{n-i}} \\) are full field elements.
+For sum-check involving these small values, the prover enjoys a speedup in the first round, since the original evaluations
+$$ (p(x), q(x))\_{x \in \\{0,1\\}^n} $$
+are small. However, this speedup goes away in later rounds, since the bound evaluations
+\\[ ( p(r_1, \dots, r_{i-1},x), q(r_1, \dots, r_{i-1}, x))_{x \in \\{0,1\\}^{n-i}} \\]
+are full field elements.
 
 Round batching allows the prover to enjoy cheap multiplications in the first \\( w > 1 \\) rounds. Indeed, applying the technique to the first \\( w \\) rounds means that the prover needs to compute the evaluations
 $$
 s(x_1, \dots, x_w) = \sum_{x' \in \\{0,1\\}^{n-w}} p(x_1, \dots, x_w, x') \cdot q(x_1, \dots, x_w, x').
 $$
-Since the original evaluations \\( \left( p(x), q(x)\right)_{x \in \\{0,1\\}^n} \\) are small, the _extended_ evaluations $$\left( p(x_1, \dots, x_w, x'), q(x_1, \dots, x_w, x')\right)_{(x_1, \dots, x_w) \in \\{0,1,2\\}^w, x' \in \\{0,1\\}^{n-w}}$$
+Since the original evaluations $$(p(x), q(x))\_{x \in \\{0,1\\}^n} $$ are small, the extended evaluations $$ ( p(x_1, \dots, x_w, x'), q(x_1, \dots, x_w, x'))_{(x_1, \dots, x_w) \in \\{0,1,2\\}^w, x' \in \\{0,1\\}^{n-w}}$$
 are also small, since they are simple linear combinations of the original ones. Thus, round batching trades off expensive field multiplication that would have been incurred in rounds \\( 2, \dots, w \\), with a larger number of much cheaper small multiplications. In practice, we can set \\( w \approx 3 \\) for about a \\( 2-3\times \\) speedup in prover time.
 
 **Fewer streaming passes.** Recall that in the CMT streaming algorithm, the prover needs to make a pass over the original input in every round (or as long as we don't have space to store the bound evaluations). The cost of each pass is \\( O(N) = O(2^n) \\), which _does not shrink_ as the protocol progresses.
@@ -310,7 +313,7 @@ Round batching allows us to reduce the number of passes over the original inputs
 
 The sum-check protocol has become the workhorse of modern proof systems, powering the fastest zkVMs as well as a large number of sub-protocols such as polynomial commitment schemes [11]. In this post, we have seen the evolution of sum-check proving algorithms: from the classic linear-time prover that trades memory for speed, to the streaming algorithm that sacrifices time for a minimal memory footprint. Both approaches share a common limitation—they process rounds sequentially, binding each challenge before moving to the next.
 
-We then saw how round batching breaks this sequential dependency, leading to two practical wins: it keeps arithmetic in fast, small-value operations for longer, and it reduces the number of streaming passes needed for memory-constrained settings. The technique is already being integrated into Jolt; without the small-value computation, for example, sum-check will be even more of a bottleneck than the current \\( 70\% \\) of total prover time.
+We then saw how round batching breaks this sequential dependency, leading to two practical wins: it keeps arithmetic in fast, small-value operations for longer, and it reduces the number of streaming passes needed for memory-constrained settings. The technique is already being integrated into Jolt; without the small-value computation, for example, sum-check will be even more of a bottleneck than the current 70% of total prover time.
 
 As zkVMs see broader adoption—from blockchain scalability to privacy-preserving identity—every percentage point of prover speedup translates to real cost savings and expanded applicability. The gap between native execution and proof generation is closing quickly, as algorithmic refinements like round batching and hardware acceleration continue to chip away at the overhead. It is perhaps surprising that we are still extracting efficiency from the sum-check protocol; despite being over three decades old, we continue to find new ways to optimize it for modern constraints.
 
