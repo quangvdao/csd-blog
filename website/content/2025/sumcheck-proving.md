@@ -302,36 +302,39 @@ $$
 \end{aligned}
 $$
 
-**The apparent cost.** At first glance, round batching seems like a terrible idea. In standard sum-check, each round requires evaluating the polynomial on a $\{0,1\}$ grid—just 2 points per variable. With round batching, we instead evaluate on a $\{0,1,2\}$ grid—3 points per variable. This means each additional round we batch beyond the first multiplies the work by a factor of $3/2$. Concretely:
-- $w = 1$ (standard round-by-round): this is the baseline—no overhead
-- $w = 2$ rounds batched: overhead factor of $3/2$ compared to doing 2 rounds separately
-- $w = 3$ rounds batched: overhead factor of $(3/2)^2 = 9/4$
-- $w = 4$ rounds batched: overhead factor of $(3/2)^3 = 27/8$
-
-More generally, for a degree-$d$ product of multilinear polynomials, the overhead per additional batched round is $(d+1)/2$, since we need $d+1$ evaluation points instead of $2$. This exponential blowup in $w$ seems to doom the approach—so why bother?
+**The apparent cost.** At first glance, round batching seems to be strictly slower. In the round-by-round sum-check algorithms (whether linear-time or streaming), we only need to compute $3$ evaluations of a quadratic polynomial every round (or $d+1$ evaluations for a general sum-check instance over a degree-$d$ product of multilinears). With round batching of window $w$, we need to compute $3^w$ (or $(d+1)^w$ in the general case) evaluations over the $w$ rounds. If we had computed round-by-round evaluations instead, this number is only $w \cdot (d+1)$. The gap between $(d+1)^w$ and $w \cdot (d+1)$ grows very quickly - for instance, with $d = 2$ and $w = 3$, we are computing **three** times as many evaluations by batching three rounds together. Why do we even bother to explore this approach?
 
 ### Why does round batching help?
 
-The key insight is that this overhead is not created equal across all rounds. Two factors make round batching worthwhile despite the apparent blowup.
+The key insight is that the cost of computing evaluations is not equal across all rounds. In particular, there are two settings where round batching leads to a speedup despite the apparent extra work.
 
-**Small-field arithmetic at the start.** In zkVMs, the underlying data (register values, memory contents) are small—typically 64-bit integers—while the proof system operates over a large 256-bit field. The standard prover loses this advantage after round 1: once it binds the first challenge $r_1$, all subsequent arithmetic involves large field elements, which are 10–20× slower. Round batching delays this transition. By treating the first $w$ variables symbolically, the prover performs the extra $(3/2)^w$ work using fast, native 64-bit arithmetic. The overhead is cheap precisely when the tables are largest; we only pay the large-field cost when we finally bind the window to the verifier's challenges.
+**Small-field arithmetic at the start.** In zkVMs, the underlying data (register values, memory contents) are small—typically 64-bit integers—while the proof system operates over a large, often 128-bit or even 256-bit field. Arithmetic with 64-bit integers are about **10-50x** faster compared to generic field multiplication.
 
-**Fewer streaming passes.** For the memory-efficient streaming algorithm, recall that each pass over the original data costs $O(N) = O(2^n)$—this is the dominant cost, and it does not shrink as the protocol progresses. In contrast, the round-batching overhead applies only to the $2^{n-i}$ remaining "bound" evaluations at round $i$, which halves with each round. By batching $w$ rounds together, we reduce the number of streaming passes by a factor of $w$, while the per-pass overhead (from the larger grid) grows only as $(3/2)^w$. With the right schedule—small windows early when tables are large, larger windows later when tables have shrunk—we improve the time complexity's dependence on the polynomial degree from $O(d^2)$ to $O(d \log d)$, while staying within a sublinear memory budget.
+For sum-check involving these small values, the prover enjoys a speedup in the first round, since the original evaluations $\left( p(x), q(x)\right)_{x \in \{0,1\}^n}$ are small. However, this speedup goes away in later rounds, since the bound evaluations $\left( p(r_1, \dots, r_{i-1},x), q(r_1, \dots, r_{i-1}, x)\right)_{x \in \{0,1\}^{n-i}}$ are full field elements.
 
-**Choosing the window size.** The window size $w$ is a tunable parameter: too small and we leave performance on the table; too large and we overcompute. In practice, even a modest window of $w = 3$ or $4$ rounds yields significant speedups, since it targets the most expensive early rounds where the tables are largest and the arithmetic is cheapest.
+Round batching allows the prover to enjoy cheap multiplications in the first $w > 1$ rounds. Indeed, applying the technique to the first $w$ rounds means that the prover needs to compute the evaluations
+$$
+s(x_1, \dots, x_w) = \sum_{x' \in \{0,1\}^{n-w}} p(x_1, \dots, x_w, x') \cdot q(x_1, \dots, x_w, x').
+$$
+Since the original evaluations $\left( p(x), q(x)\right)_{x \in \{0,1\}^n}$ are small, the _extended_ evaluations $$\left( p(x_1, \dots, x_w, x'), q(x_1, \dots, x_w, x')\right)_{(x_1, \dots, x_w) \in \{0,1,2\}^w, x' \in \{0,1\}^{n-w}}$$
+are also small, since they are simple linear combinations of the original ones. Thus, round batching trades off expensive field multiplication that would have been incurred in rounds $2, \dots, w$, with a larger number of much cheaper small multiplications. In practice, we can set $w \approx 3$ for about a $2-3\times$ speedup in prover time.
+
+**Fewer streaming passes.** Recall that in the CMT streaming algorithm, the prover needs to make a pass over the original input in every round (or as long as we don't have space to store the bound evaluations). The cost of each pass is $O(N) = O(2^n)$, which _does not shrink_ as the protocol progresses.
+
+Round batching allows us to reduce the number of passes over the original inputs. Instead of a pass every round in a window of $w$ consecutive rounds, round batching only requires a single streaming pass at the beginning of this window. The increase in evaluation cost is _smaller_ as the rounds progress, costing only $2^{n-i}$ multiplication per evaluation if we batch at round $i$. Thus, we are trading off more evaluation computations, which scale as $(d+1)^w \cdot 2^{n-i}$, in lieu of a $(w-1) \cdot 2^n$ cost saved by doing fewer streams over the input. With the right schedule—small windows early when evaluation computation is more costly, and larger windows later (increasing exponentially)—we can improve the number of streaming passes **asymptotically** from $O(\log n)$ to $O(\log \log n)$. In practice, this can be as much as a $3-5\times$ speedup over the original CMT algorithm.
 
 ## Conclusion
 
-The sum-check protocol has become the workhorse of modern proof systems, powering everything from zkVMs to verifiable machine learning. In this post, we traced the evolution of sum-check proving algorithms: from the classic linear-time prover that trades memory for speed, to the streaming algorithm that sacrifices time for a minimal memory footprint. Both approaches share a common limitation—they process rounds sequentially, binding each challenge before moving to the next.
+The sum-check protocol has become the workhorse of modern proof systems, powering the fastest zkVMs as well as a large number of sub-protocols such as polynomial commitment schemes [11]. In this post, we have seen the evolution of sum-check proving algorithms: from the classic linear-time prover that trades memory for speed, to the streaming algorithm that sacrifices time for a minimal memory footprint. Both approaches share a common limitation—they process rounds sequentially, binding each challenge before moving to the next.
 
-Round batching breaks this sequential dependency. By treating multiple variables symbolically and computing a higher-dimensional polynomial upfront, the prover can answer several rounds at once. This simple idea yields two practical wins: it keeps arithmetic in fast, small-field operations for longer, and it reduces the number of streaming passes needed for memory-constrained settings. The technique is already being integrated into Jolt, where it targets the 70% of proving time currently spent on sum-check.
+We then saw how round batching breaks this sequential dependency, leading to two practical wins: it keeps arithmetic in fast, small-value operations for longer, and it reduces the number of streaming passes needed for memory-constrained settings. The technique is already being integrated into Jolt; without the small-value computation, for example, sum-check will be even more of a bottleneck than the current $70\%$ of total prover time.
 
-As zkVMs see broader adoption—from blockchain scalability to privacy-preserving identity—every percentage point of prover speedup translates to real cost savings and expanded applicability. The gap between native execution and proof generation remains large, but techniques like round batching are steadily closing it. We are closer than ever to making verifiable computation practical and ubiquitous.
+As zkVMs see broader adoption—from blockchain scalability to privacy-preserving identity—every percentage point of prover speedup translates to real cost savings and expanded applicability. The gap between native execution and proof generation is closing quickly, as algorithmic refinements like round batching and hardware acceleration continue to chip away at the overhead. It is perhaps surprising that we are still extracting efficiency from the sum-check protocol; despite being over three decades old, we continue to find new ways to optimize it for modern constraints.
 
 <!-- 
 [^1]: However, it is possible to interpret the coefficients of a multilinear polynomial as evaluations over the set $\{0,\infty\}^n$, under an appropriate definition of "evaluation at infinity". This is a non-standard choice with potential efficiency benefits, but we do not discuss it further here. -->
 
-Citations:
+## Citations:
 
 <a id="ref-1"></a>[1] Google. Longfellow ZK: Implementation of the Google Zero-Knowledge library for Identity Protocols. GitHub repository. https://github.com/google/longfellow-zk. See also: Frigo, M., & shelat, a. (2025). The Longfellow Zero-knowledge Scheme (draft-google-cfrg-libzk-01). Internet-Draft, IETF. https://datatracker.ietf.org/doc/draft-google-cfrg-libzk/
 
@@ -352,3 +355,5 @@ Citations:
 <a id="ref-9"></a>[9] Bagad, S., Dao, Q., Domb, Y., & Thaler, J. (2025). Speeding Up Sum-Check Proving. Cryptology ePrint Archive, Paper 2025/1117. https://eprint.iacr.org/2025/1117
 
 <a id="ref-10"></a>[10] Baweja, A., Chiesa, A., Fedele, E., Fenzi, G., Mishra, P., Mopuri, T., & Zitek-Estrada, A. (2025). Time-Space Trade-Offs for Sumcheck. In Theory of Cryptography Conference (TCC 2025).
+
+<a id="ref-11"></a>[11] Arnon, G., Chiesa, A., Fenzi, G., & Yogev, E. (2024). WHIR: Reed–Solomon Proximity Testing with Super-Fast Verification. Cryptology ePrint Archive, Paper 2024/1586. https://eprint.iacr.org/2024/1586
