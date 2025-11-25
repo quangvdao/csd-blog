@@ -51,18 +51,16 @@ The sum-check protocol is an interactive proof that allows an untrusted prover t
 
 Formally, we fix a finite field \\( \mathbb{F} \\) and a multivariate polynomial \\( p(X_1, \dots, X_n) \in \mathbb{F}[X_1,\dots, X_n] \\),
 of degree bounded by \\( d \\) in each variable. The sum-check claim is then
-$$
-    \sum_{x_1 \in H_1, \dots, x_n \in H_n} p(x_1,\dots,x_n) = c,    
-$$
+$$ \sum_{x_1 \in H_1, \dots, x_n \in H_n} p(x_1,\dots,x_n) = c, $$
 for some evaluation domains \\( H_1, \dots, H_n \subseteq \mathbb{F} \\) and a claimed value \\( c \in \mathbb{F} \\).
-In most applications, and for the remainder of this blog post, we restrict to the _Boolean hypercube_, which is the domain \\( H_1 = \dots = H_n = \{0,1\} \\).
+In most applications, and for the remainder of this blog post, we restrict to the _Boolean hypercube_, which is the domain \\( H_1 = \dots = H_n = \\{0,1\\} \\).
 
-The verifier knows \\( p \\), or at least has oracle access to evaluations of \\( p \\) at points of its choice, but wants to use this query access as little as possible. Naively, the verifier could evaluate \\( p \\) on all \\( 2^n \\) points of \\( \{0,1\}^n \\) and sum the results, which takes work on the order of \\( O(2^n) \\). The key idea of sum-check is that, by interacting with an untrusted prover who supplies additional "auxiliary" polynomials, the verifier can reduce the work of checking the original claim to checking a related claim about \\( p \\) at a single randomly chosen point.
+The verifier knows \\( p \\), or at least has oracle access to evaluations of \\( p \\) at points of its choice, but wants to use this query access as little as possible. Naively, the verifier could evaluate \\( p \\) on all \\( 2^n \\) points of \\( \\{0,1\\}^n \\) and sum the results, which takes work on the order of \\( O(2^n) \\). The key idea of sum-check is that, by interacting with an untrusted prover who supplies additional "auxiliary" polynomials, the verifier can reduce the work of checking the original claim to checking a related claim about \\( p \\) at a single randomly chosen point.
 
 In particular, the data that the prover sends at each round are the "one-dimensional" slices of this multivariate
 polynomial. In the first round, the prover sends the univariate polynomial
 $$
-    s_1(X) = \sum_{(x_2,\dots,x_n) \in \{0,1\}^{n-1}} p(X, x_2,\dots,x_n).
+    s_1(X) = \sum_{(x_2,\dots,x_n) \in \\{0,1\\}^{n-1}} p(X, x_2,\dots,x_n).
 $$
 If the original claim is correct, then \\( s_1(X) \\) has degree at most \\( d \\), and moreover
 \\( s_1(0) + s_1(1) = c \\).
@@ -72,11 +70,11 @@ If both checks pass, the verifier samples a random challenge \\( r_1 \gets \math
 The point of this random challenge is to "pin down" the prover’s behavior at a point of the verifier’s choice:
 if the prover has lied about \\( s_1(X) \\), then with high probability (at most \\( d / \lvert \mathbb{F} \rvert \\))
 the fake \\( s_1 \\) will disagree with the true polynomial at \\( X = r_1 \\).
-If we set the finite field size to be sufficiently large, e.g., at least \\( 128 \\) bits for cryptographic security, then this probability is truly negligible.
+If we set the finite field size to be sufficiently large, e.g., at least 128 bits for cryptographic security, then this probability is truly negligible.
 
 After this first round of interaction, the prover and verifier have effectively reduced the problem to showing that
 $$
-    \sum_{(x_2,\dots, x_n) \in \{0,1\}^{n-1}} p_1(x_2, \dots, x_n) = c_1,
+    \sum_{(x_2,\dots, x_n) \in \\{0,1\\}^{n-1}} p_1(x_2, \dots, x_n) = c_1,
 $$
 where we define \\( p_1(x_2,\dots,x_n) := p(r_1, x_2,\dots,x_n) \\) and \\( c_1 := s_1(r_1) \\).
 That is, we have "bound" the first variable to \\( r_1 \\) and now reduce to a new sum-check instance in \\( n-1 \\)
@@ -84,7 +82,7 @@ variables.
 The protocol then repeats the same pattern on this new instance:
 in the second round, the prover sends a univariate polynomial
 $$
-    s_2(X) = \sum_{(x_3,\dots,x_n) \in \{0,1\}^{n-2}} p_1(X, x_3,\dots,x_n),
+    s_2(X) = \sum_{(x_3,\dots,x_n) \in \\{0,1\\}^{n-2}} p_1(X, x_3,\dots,x_n),
 $$
 the verifier again checks the degree and the equation \\( s_2(0) + s_2(1) = c_1 \\),
 samples a fresh random \\( r_2 \gets \mathbb{F} \\), sets the new claim \\( c_2 := s_2(r_2) \\), and continue.
@@ -116,23 +114,23 @@ $$
     q(X_1, X_2, X_3) = 3X_1 X_3 + 2X_2 + 5
 $$
 is multilinear, while \\( X_1^2 + X_2 \\) is not. A key fact is that a multilinear polynomial in \\( n \\) variables is _uniquely_
-determined by its values on the \\( 2^n \\) points of the **Boolean hypercube** \\( \{0,1\}^n \\). This gives a natural encoding of a length-\\( 2^n \\) vector \\( \mathbf{v}=(v_0,\dots,v_{2^n-1}) \\) over the finite field \\( \mathbb{F} \\).
+determined by its values on the \\( 2^n \\) points of the **Boolean hypercube** \\( \\{0,1\\}^n \\). This gives a natural encoding of a length-\\( 2^n \\) vector \\( \mathbf{v}=(v_0,\dots,v_{2^n-1}) \\) over the finite field \\( \mathbb{F} \\).
 
-We can also make this encoding precise with a mathematical formula. Given a function \\( p : \{0,1\}^n \to \mathbb{F} \\) (for example, a vector of trace or constraint values indexed by
-\\( y \in \{0,1\}^n \\)), its **multilinear extension** is the _unique_ multilinear polynomial \\( \widetilde{p}(X_1,\dots,X_n) \\)
+We can also make this encoding precise with a mathematical formula. Given a function \\( p : \\{0,1\\}^n \to \mathbb{F} \\) (for example, a vector of trace or constraint values indexed by
+\\( y \in \\{0,1\\}^n \\)), its **multilinear extension** is the _unique_ multilinear polynomial \\( \widetilde{p}(X_1,\dots,X_n) \\)
 that agrees with \\( p \\) on all Boolean points. The formula for the multilinear extension is as follows:
 $$
-    \widetilde{p}(X_1,\dots, X_n) = \sum_{y \in \{0,1\}^n} \widetilde{eq}(\vec{X}, y) \cdot p(y),
+    \widetilde{p}(X_1,\dots, X_n) = \sum_{y \in \\{0,1\\}^n} \widetilde{eq}(\vec{X}, y) \cdot p(y),
 $$
 where the **equality polynomial** \\( \widetilde{eq} \\) is defined by
 $$
     \widetilde{eq}(\vec{X}, \vec{Y}) = \prod_{i=1}^n \big((1 - X_i)(1 - Y_i) + X_i Y_i\big).
 $$
-You should think of \\( \widetilde{eq} \\) as the indicator function of the equality relation on the Boolean hypercube. Indeed, for any \\( \vec{x}, \vec{y} \in \{0,1\}^n \\), we have \\( \widetilde{eq}(\vec{x}, \vec{y}) = 1 \\) if \\( \vec{x} = \vec{y} \\)
+You should think of \\( \widetilde{eq} \\) as the indicator function of the equality relation on the Boolean hypercube. Indeed, for any \\( \vec{x}, \vec{y} \in \\{0,1\\}^n \\), we have \\( \widetilde{eq}(\vec{x}, \vec{y}) = 1 \\) if \\( \vec{x} = \vec{y} \\)
 and \\( 0 \\) otherwise. Plugging this into the multilinear extension formula, we can see that each term in the sum "picks out" the value \\( p(y) \\) at exactly one point on the hypercube, thanks to the equality polynomial \\( \widetilde{eq}(\vec{X}, y) \\).
 
 As a small example, the 2-variate multilinear extension is given by
-$$ \begin{aligned} p(X_1, X_2) = p(0,0) \cdot (1 - X_1)(1 - X_2) &+ p(0,1) \cdot (1 - X_1)X_2 \\ +\; p(1,0) \cdot X_1(1 - X_2)& + p(1,1) \cdot X_1 X_2.
+$$ \begin{aligned} p(X_1, X_2) = p(0,0) \cdot (1 - X_1)(1 - X_2) &+ p(0,1) \cdot (1 - X_1)X_2 \\\ + p(1,0) \cdot X_1(1 - X_2)& + p(1,1) \cdot X_1 X_2.
 \end{aligned}$$
 
 ### Example: Arithmetizing a Batched Zero-Check
@@ -141,7 +139,7 @@ Now that we have seen multilinear polynomials, let's see how they allow us to tu
 
 Consider a scenario where we have two columns of data, \\( A \\) and \\( B \\), each of length \\( N=4 \\). We want to prove that the element-wise product of these columns is zero. That is, if \\( A = [a_0, a_1, a_2, a_3] \\) and \\( B = [b_0, b_1, b_2, b_3] \\), we claim that
 $$
-    a_i \cdot b_i = 0 \quad \text{for all } i \in \{0, 1, 2, 3\}.
+    a_i \cdot b_i = 0 \quad \text{for all } i \in \\{0, 1, 2, 3\\}.
 $$
 This **batched zero-check** pattern appears everywhere in proving program execution. For example, given two input registers holding values \\( x \\) and \\( y \\), and an output register holding value \\( z \\), we can enforce that all addition instructions are correctly performed by checking that the formula
 $$
@@ -149,9 +147,9 @@ $$
 $$
 holds for all cycles \\( i \\). Here, \\( S_{\text{ADD}} \\) is a selector that is \\( 1 \\) if the instruction is ADD and \\( 0 \\) otherwise.
 
-To use sum-check, we view the indices as points on the boolean hypercube \\( \{0,1\}^2 \\) and the columns as evaluations of multilinear polynomials. Let \\( p(x_1, x_2) \\) and \\( q(x_1, x_2) \\) be the multilinear extensions of \\( A \\) and \\( B \\) respectively. Then our claim becomes:
+To use sum-check, we view the indices as points on the boolean hypercube \\( \\{0,1\\}^2 \\) and the columns as evaluations of multilinear polynomials. Let \\( p(x_1, x_2) \\) and \\( q(x_1, x_2) \\) be the multilinear extensions of \\( A \\) and \\( B \\) respectively. Then our claim becomes:
 $$
-    p(x_1, x_2) \cdot q(x_1, x_2) = 0 \quad \text{for all } (x_1, x_2) \in \{0,1\}^2.
+    p(x_1, x_2) \cdot q(x_1, x_2) = 0 \quad \text{for all } (x_1, x_2) \in \\{0,1\\}^2.
 $$
 
 This pointwise condition can be bundled into a single sum over the hypercube. Define
@@ -160,15 +158,15 @@ $$
 $$
 and consider the claim that
 $$
-    g(x_1, x_2) = 0 \quad \text{for all } (x_1, x_2) \in \{0,1\}^2.
+    g(x_1, x_2) = 0 \quad \text{for all } (x_1, x_2) \in \\{0,1\\}^2.
 $$
 This claim is equivalent to saying that the multilinear extension \\( \widetilde{g} \\) should vanish on all Boolean points. In other words,
 $$
-    \sum_{(x_1, x_2) \in \{0,1\}^2} \widetilde{eq}\big((X_1, X_2), (x_1, x_2)\big) \cdot p(x_1, x_2) \cdot q(x_1, x_2) = 0
+    \sum_{(x_1, x_2) \in \\{0,1\\}^2} \widetilde{eq}\big((X_1, X_2), (x_1, x_2)\big) \cdot p(x_1, x_2) \cdot q(x_1, x_2) = 0
 $$
 as multilinear polynomials. We now reduce this to a sum-check instance by sampling a random point \\( (r_1, r_2) \in \mathbb{F}^2 \\) and checking that the polynomial vanishes at this point:
 $$
-    \sum_{(x_1, x_2) \in \{0,1\}^2} \widetilde{eq}\big((r_1, r_2), (x_1, x_2)\big) \cdot p(x_1, x_2) \cdot q(x_1, x_2) = 0.
+    \sum_{(x_1, x_2) \in \\{0,1\\}^2} \widetilde{eq}\big((r_1, r_2), (x_1, x_2)\big) \cdot p(x_1, x_2) \cdot q(x_1, x_2) = 0.
 $$
 If this sum-check claim is correct, then the original multilinear polynomial \\( \widetilde{g} \\) is identically zero, except with negligible probability \\( 2 / \lvert \mathbb{F} \rvert \\). So, instead of checking four separate equalities \\( g(x) = 0 \\) at the cube points,
 we check a **single** polynomial identity at a random point. Our exposition generalizes easily to an arbitrary \\( 2^n \\)-batched zero-check, which is converted into a \\( n \\)-variable sum-check instance.
@@ -177,9 +175,9 @@ we check a **single** polynomial identity at a random point. Our exposition gene
 
 We now turn to algorithms for the prover. We will focus on the most common setting in modern proof systems: sum-check over a low-degree function applied to one or more multilinear polynomials. This captures many real applications, such as the batched zero-check we saw earlier. To simplify the exposition, we further specialize to the case of a product of two multilinear polynomials
 $$
-    \sum_{x \in \{0,1\}^n} p(x) \cdot q(x) = c,
+    \sum_{x \in \\{0,1\\}^n} p(x) \cdot q(x) = c,
 $$
-where \\( p, q : \{0,1\}^n \to \mathbb{F} \\) are given by their evaluations on the Boolean hypercube. The algorithms we cover straightforwardly generalize to the product of arbitrary number of multilinear polynomials.
+where \\( p, q : \\{0,1\\}^n \to \mathbb{F} \\) are given by their evaluations on the Boolean hypercube. The algorithms we cover straightforwardly generalize to the product of arbitrary number of multilinear polynomials.
 
 ### Linear-time algorithm
 
@@ -187,7 +185,7 @@ The first prover algorithm we consider, following Vu, Setty, Blumberg, and Walfi
 
 Recall that in the first round of sum-check, the prover needs to compute and send the univariate polynomial
 $$
-    s_1(X) = \sum_{(x_2,\dots,x_n) \in \{0,1\}^{n-1}} p(X, x_2,\dots,x_n) \cdot q(X, x_2,\dots,x_n).
+    s_1(X) = \sum_{(x_2,\dots,x_n) \in \\{0,1\\}^{n-1}} p(X, x_2,\dots,x_n) \cdot q(X, x_2,\dots,x_n).
 $$
 Since \\( s_1(X) \\) has degree at most \\( 2 \\), it is completely determined by its evaluations on three distinct points, which we may choose to be \\( s_1(0), s_1(1) \\), and \\( s_1(2) \\). The prover can compute these in a single pass over the \\( 2^n \\) evaluations of \\( p \\) and \\( q \\). For each point \\( x' = (x_2,\dots,x_n) \\), given evaluations of \\( p \\) and \\( q \\) at \\( (0,x') \\) and \\( (1,x') \\), the prover adds the following to the running sums \\( s_1(0) \\), \\( s_1(1) \\), \\( s_1(2) \\):
 $$
@@ -207,9 +205,9 @@ $$
     p_{1}(x_2,\dots,x_n) := p(r_1, x_2,\dots,x_n), \quad
     q_{1}(x_2,\dots,x_n) := q(r_1, x_2,\dots,x_n)
 $$
-in order to continue the protocol on \\( n-1 \\) variables. The linear-time algorithm explicitly materializes the evaluations of \\( p_{1} \\) and \\( q_{1} \\) on \\( \{0,1\}^{n-1} \\) by making another pass over the original table and writing out two new vectors of evaluations, each of size \\( 2^{n-1} \\). The update formula is
+in order to continue the protocol on \\( n-1 \\) variables. The linear-time algorithm explicitly materializes the evaluations of \\( p_{1} \\) and \\( q_{1} \\) on \\( \\{0,1\\}^{n-1} \\) by making another pass over the original table and writing out two new vectors of evaluations, each of size \\( 2^{n-1} \\). The update formula is
 $$
-    p_{1}(x_2,\dots,x_n) = (1 - r_1) \cdot p(0, x_2,\dots,x_n) + r_1 \cdot p(1, x_2,\dots,x_n), \\
+    p_{1}(x_2,\dots,x_n) = (1 - r_1) \cdot p(0, x_2,\dots,x_n) + r_1 \cdot p(1, x_2,\dots,x_n), \\\
     q_{1}(x_2,\dots,x_n) = (1 - r_1) \cdot q(0, x_2,\dots,x_n) + r_1 \cdot q(1, x_2,\dots,x_n).
 $$
 
@@ -224,16 +222,16 @@ One downside of this algorithm is the need to keep **linear** storage (for insta
 ### Streaming algorithm with logarithmic space
 
 We now present another classic sum-check proving algorithm, by Cormode, Mitzenmacher, and Thaler [8], that is much more memory efficient.
-The setting is the following. Assume there is enough persistent storage (for example, on disk) to hold all evaluations of \\( p \\) and \\( q \\) on \\( \{0,1\}^n \\), but not enough RAM to store the intermediate “bound” evaluation values of \\( p_1 \\), \\( q_1 \\), and so on. Alternatively, we can generate the original evaluations of \\( p \\) and \\( q \\) cheaply on the fly, but do not have space to cache all of the bound evaluations.
+The setting is the following. Assume there is enough persistent storage (for example, on disk) to hold all evaluations of \\( p \\) and \\( q \\) on \\( \\{0,1\\}^n \\), but not enough RAM to store the intermediate “bound” evaluation values of \\( p_1 \\), \\( q_1 \\), and so on. Alternatively, we can generate the original evaluations of \\( p \\) and \\( q \\) cheaply on the fly, but do not have space to cache all of the bound evaluations.
 
-In this setting, the prover will need to perform a streaming pass over the original data in order to compute the univariate polynomial \\( s_i(X) \\) for each round \\( i \\). Recall that this polynomial is determined by its evaluations at \\( u \in \{0,1,2\} \\):
+In this setting, the prover will need to perform a streaming pass over the original data in order to compute the univariate polynomial \\( s_i(X) \\) for each round \\( i \\). Recall that this polynomial is determined by its evaluations at \\( u \in \\{0,1,2\\} \\):
 $$
-    s_i(u) = \sum_{(x_{i+1},\dots,x_n) \in \{0,1\}^{n-i}} p(r_1,\dots,r_{i-1}, X, x_{i+1},\dots,x_n)
+    s_i(u) = \sum_{(x_{i+1},\dots,x_n) \in \\{0,1\\}^{n-i}} p(r_1,\dots,r_{i-1}, X, x_{i+1},\dots,x_n)
                                            \cdot q(r_1,\dots,r_{i-1}, X, x_{i+1},\dots,x_n).
 $$
 By the multilinear extension formula and the equality polynomial introduced earlier, we can write these partially bound evaluations as a further sum
 $$
-    p(r_1,\dots,r_{i-1}, u, x_{i+1},\dots,x_n) = \sum_{y \in \{0,1\}^{i-1}} \widetilde{eq}((r_1,\dots,r_{i-1}), y) \cdot p(y, u, x_{i+1},\dots,x_n),
+    p(r_1,\dots,r_{i-1}, u, x_{i+1},\dots,x_n) = \sum_{y \in \\{0,1\\}^{i-1}} \widetilde{eq}((r_1,\dots,r_{i-1}), y) \cdot p(y, u, x_{i+1},\dots,x_n),
 $$
 and the same holds for \\( q \\).
 
@@ -241,7 +239,7 @@ In other words, the value \\( p(r_1,\dots,r_{i-1}, u, x_{i+1},\dots,x_n) \\) is 
 
 This observation translates directly into a streaming algorithm. To compute the three required values \\( s_i(0), s_i(1), s_i(2) \\) for round \\( i \\), the prover can do the following:
 1.  **Initialize:** Set three accumulators for \\( s_i(0), s_i(1), s_i(2) \\) to zero.
-2.  **Stream:** Read the original evaluation stream \\( p(x), q(x) \\) over all \\( x \in \{0,1\}^n \\), split into chunks of size \\( 2^{i} \\) that agrees on the suffix \\( x_{i+1},\dots,x_n \\).
+2.  **Stream:** Read the original evaluation stream \\( p(x), q(x) \\) over all \\( x \in \\{0,1\\}^n \\), split into chunks of size \\( 2^{i} \\) that agrees on the suffix \\( x_{i+1},\dots,x_n \\).
 3.  **Update:** For each chunk, compute the appropriate weights based on the current round \\( i \\) and challenges \\( r_1, \dots, r_{i-1} \\) for the prefix \\( y = (x_1,\dots,x_i) \\). Importantly, the equality-polynomial weights can be computed on-the-fly in \\( O(2^i) \\) time based on the challenges \\( r_1, \dots, r_{i-1} \\). Add the weighted product terms to the respective accumulators.
 4.  **Interpolate:** Once the stream is finished, the accumulators hold \\( s_i(0), s_i(1), s_i(2) \\). Use these to recover the polynomial \\( s_i(X) \\).
 
@@ -263,26 +261,26 @@ This is the idea behind **round batching**, a technique that is recently introdu
 
 At first glance, this proposal seems impossible: the prover cannot know the claim for round 2 without knowing the challenge \\( r_1 \\) from round 1. The key observation is that the prover can compute a response that is **oblivious** to the future challenges. This is achieved by computing a _bivariate_ polynomial
 $$
-    s(X_1, X_2) = \sum_{x' \in \{0,1\}^{n-2}} p(X_1, X_2, x') \cdot q(X_1, X_2, x')
+    s(X_1, X_2) = \sum_{x' \in \\{0,1\\}^{n-2}} p(X_1, X_2, x') \cdot q(X_1, X_2, x')
 $$
 that suffices to answer both rounds 1 and 2. Indeed, the first round polynomial \\( s_1(X_1) \\) is equal to \\( s(X_1, 0) + s(X_1, 1) \\), and once the prover receives the first challenge \\( r_1 \\), the second round polynomial \\( s_2(X_2) \\) is equal to \\( s(r_1, X_2) \\).
 
 
 More generally, if we want to compute \\( w \\) consecutive rounds at once, starting at round \\( i \\), the prover will need to compute the \\( w \\)-variate polynomial
 $$
-    s(X_1, \dots, X_w) = \sum_{x' \in \{0,1\}^{n-w-i}} p(r_1, \dots, r_{i-1}, X_1, \dots, X_w, x') \cdot q(r_1, \dots, r_{i-1}, X_1, \dots, X_w, x').
+    s(X_1, \dots, X_w) = \sum_{x' \in \\{0,1\\}^{n-w-i}} p(r_1, \dots, r_{i-1}, X_1, \dots, X_w, x') \cdot q(r_1, \dots, r_{i-1}, X_1, \dots, X_w, x').
 $$
 Once the prover has computed this polynomial, the next \\( w \\) rounds of the sum-check protocol reduces to doing sum-check over the \\( w \\)-variate polynomial \\( s \\) itself:
 $$
-\sum_{x \in \{0,1\}^w} s(x) = c_i,
+\sum_{x \in \\{0,1\\}^w} s(x) = c_i,
 $$
 as we saw in our example above with \\( i=1 \\) and \\( w=2 \\).
 
-Since \\( w \\) is often much smaller than \\( n \\), this sum-check instance is trivial to prove. The main cost is in computing \\( s(X_1, \dots, X_w) \\) itself. Since \\( s \\) is a **multi-quadratic** polynomial (having degree at most \\( 2 \\) in each variable), it is completely determined by its evaluations on the \\( \{0,1,2\}^w \\) grid. For instance, if \\( w = 2 \\), we can compute one of these evaluations (say \\( s(1, 2) \\)) as
+Since \\( w \\) is often much smaller than \\( n \\), this sum-check instance is trivial to prove. The main cost is in computing \\( s(X_1, \dots, X_w) \\) itself. Since \\( s \\) is a **multi-quadratic** polynomial (having degree at most \\( 2 \\) in each variable), it is completely determined by its evaluations on the \\( \\{0,1,2\\}^w \\) grid. For instance, if \\( w = 2 \\), we can compute one of these evaluations (say \\( s(1, 2) \\)) as
 $$
 \begin{aligned}
-    s(1, 2) &= \sum_{x' \in \{0,1\}^{n-2}} p(r_1, \dots, r_{i-1}, 1, 2, x') \cdot q(r_1, \dots, r_{i-1}, 1, 2, x') \\
-    &= \sum_{x' \in \{0,1\}^{n-2}} (2 \cdot p(r_1, \dots, r_{i-1}, 1, 1, x') - p(r_1, \dots, r_{i-1}, 1, 0, x')) \\
+    s(1, 2) &= \sum_{x' \in \\{0,1\\}^{n-2}} p(r_1, \dots, r_{i-1}, 1, 2, x') \cdot q(r_1, \dots, r_{i-1}, 1, 2, x') \\\
+    &= \sum_{x' \in \\{0,1\\}^{n-2}} (2 \cdot p(r_1, \dots, r_{i-1}, 1, 1, x') - p(r_1, \dots, r_{i-1}, 1, 0, x')) \\\
     &\qquad\qquad \cdot (2 \cdot q(r_1, \dots, r_{i-1}, 1, 1, x') - q(r_1, \dots, r_{i-1}, 1, 0, x')).
 \end{aligned}
 $$
@@ -295,13 +293,13 @@ The key insight is that the cost of computing evaluations is not equal across al
 
 **Small-field arithmetic at the start.** In zkVMs, the underlying data (register values, memory contents) are small—typically 64-bit integers—while the proof system operates over a large, often 128-bit or even 256-bit field. Arithmetic with 64-bit integers are about **10-50x** faster compared to generic field multiplication.
 
-For sum-check involving these small values, the prover enjoys a speedup in the first round, since the original evaluations \\( \left( p(x), q(x)\right)_{x \in \{0,1\}^n} \\) are small. However, this speedup goes away in later rounds, since the bound evaluations \\( \left( p(r_1, \dots, r_{i-1},x), q(r_1, \dots, r_{i-1}, x)\right)_{x \in \{0,1\}^{n-i}} \\) are full field elements.
+For sum-check involving these small values, the prover enjoys a speedup in the first round, since the original evaluations \\( \left( p(x), q(x)\right)_{x \in \\{0,1\\}^n} \\) are small. However, this speedup goes away in later rounds, since the bound evaluations \\( \left( p(r_1, \dots, r_{i-1},x), q(r_1, \dots, r_{i-1}, x)\right)_{x \in \\{0,1\\}^{n-i}} \\) are full field elements.
 
 Round batching allows the prover to enjoy cheap multiplications in the first \\( w > 1 \\) rounds. Indeed, applying the technique to the first \\( w \\) rounds means that the prover needs to compute the evaluations
 $$
-s(x_1, \dots, x_w) = \sum_{x' \in \{0,1\}^{n-w}} p(x_1, \dots, x_w, x') \cdot q(x_1, \dots, x_w, x').
+s(x_1, \dots, x_w) = \sum_{x' \in \\{0,1\\}^{n-w}} p(x_1, \dots, x_w, x') \cdot q(x_1, \dots, x_w, x').
 $$
-Since the original evaluations \\( \left( p(x), q(x)\right)_{x \in \{0,1\}^n} \\) are small, the _extended_ evaluations $$\left( p(x_1, \dots, x_w, x'), q(x_1, \dots, x_w, x')\right)_{(x_1, \dots, x_w) \in \{0,1,2\}^w, x' \in \{0,1\}^{n-w}}$$
+Since the original evaluations \\( \left( p(x), q(x)\right)_{x \in \\{0,1\\}^n} \\) are small, the _extended_ evaluations $$\left( p(x_1, \dots, x_w, x'), q(x_1, \dots, x_w, x')\right)_{(x_1, \dots, x_w) \in \\{0,1,2\\}^w, x' \in \\{0,1\\}^{n-w}}$$
 are also small, since they are simple linear combinations of the original ones. Thus, round batching trades off expensive field multiplication that would have been incurred in rounds \\( 2, \dots, w \\), with a larger number of much cheaper small multiplications. In practice, we can set \\( w \approx 3 \\) for about a \\( 2-3\times \\) speedup in prover time.
 
 **Fewer streaming passes.** Recall that in the CMT streaming algorithm, the prover needs to make a pass over the original input in every round (or as long as we don't have space to store the bound evaluations). The cost of each pass is \\( O(N) = O(2^n) \\), which _does not shrink_ as the protocol progresses.
