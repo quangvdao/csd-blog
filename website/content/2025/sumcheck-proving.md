@@ -43,7 +43,7 @@ Over the past decade, cryptographic proof systems have matured from theoretical 
 A zkVM is a virtual computer that can run any 
 program (compiled to a common instruction-set architecture like RISC-V) and produce a certificate proving that the execution is correct. This allows developers to write programs in high-level languages like Rust or Python, compile them to RISC-V, and prove their execution correctness, all without needing deep cryptographic expertise. As these systems see wider adoption, prover efficiency becomes paramount: even for the fastest zkVMs, generating a proof is still 50,000 to 100,000 times slower than running the computation natively. Teams across academia and industry are racing to close this gap.
 
-Many state-of-the-art zkVMs, such as Jolt [3], owes much of its performance to a classical protocol from 1992: the sum-check protocol [4]. But sum-check's very success has made it a bottleneck—in Jolt, it consumes about 70% of the total proving time for large programs. In this blog post, I will introduce the sum-check protocol, detail well-known algorithms for its prover, and present a new technique that speeds up the prover in settings relevant to zkVMs, which I am currently integrating into Jolt.
+Many state-of-the-art zkVMs, such as Jolt [3], owe much of their performance to a classical protocol from 1992: the sum-check protocol [4]. But sum-check's very success has made it a bottleneck—in Jolt, it consumes about 70% of the total proving time for large programs. In this blog post, I will introduce the sum-check protocol, detail well-known algorithms for its prover, and present a new technique that speeds up the prover in settings relevant to zkVMs, which I am currently integrating into Jolt.
 
 ## Sum-Check Protocol Overview
 
@@ -179,7 +179,7 @@ We now turn to algorithms for the prover. We will focus on the most common setti
 $$
     \sum_{x \in \{0,1\}^n} p(x) \cdot q(x) = c,
 $$
-where $p, q : \{0,1\}^n \to \mathbb{F}$ are given by their evaluations on the Boolean hypercube. The algorithms we cover straightfowardly generalize to the product of arbitrary number of multilinear polynomials.
+where $p, q : \{0,1\}^n \to \mathbb{F}$ are given by their evaluations on the Boolean hypercube. The algorithms we cover straightforwardly generalize to the product of arbitrary number of multilinear polynomials.
 
 ### Linear-time algorithm
 
@@ -274,7 +274,7 @@ Both the linear-time and the CMT streaming algorithm share a common structure: t
 
 What if we could break this sequential dependency? Instead of computing just one round at a time, could the prover compute, say, rounds $1$ and $2$ simultaneously? Or any number of consecutive rounds at once?
 
-This is the idea behind **round batching**, a technique that is recently introduced in my work [9] and the work of Bajewa et al. [10]. The idea turns out to bring efficiency gains for both algorithms above, especially in the setting of proving program execution. I will first discuss the mechanics of round batching, and then discuss the benefits in more detail.
+This is the idea behind **round batching**, a technique that is recently introduced in my work [9] and the work of Bajewa et al. [10] (the latter is improved in another in-preparation work of mine). The idea turns out to bring efficiency gains for both algorithms above, especially in the setting of proving program execution. I will first discuss the mechanics of round batching, and then discuss the benefits in more detail.
 
 At first glance, this proposal seems impossible: the prover cannot know the claim for round 2 without knowing the challenge $r_1$ from round 1. The key observation is that the prover can compute a response that is **oblivious** to the future challenges. This is achieved by computing a _bivariate_ polynomial
 $$
@@ -302,31 +302,34 @@ $$
 \end{aligned}
 $$
 
+**The apparent cost.** At first glance, round batching seems like a terrible idea. In standard sum-check, each round requires evaluating the polynomial on a $\{0,1\}$ grid—just 2 points per variable. With round batching, we instead evaluate on a $\{0,1,2\}$ grid—3 points per variable. This means each additional round we batch beyond the first multiplies the work by a factor of $3/2$. Concretely:
+- $w = 1$ (standard round-by-round): this is the baseline—no overhead
+- $w = 2$ rounds batched: overhead factor of $3/2$ compared to doing 2 rounds separately
+- $w = 3$ rounds batched: overhead factor of $(3/2)^2 = 9/4$
+- $w = 4$ rounds batched: overhead factor of $(3/2)^3 = 27/8$
 
+More generally, for a degree-$d$ product of multilinear polynomials, the overhead per additional batched round is $(d+1)/2$, since we need $d+1$ evaluation points instead of $2$. This exponential blowup in $w$ seems to doom the approach—so why bother?
 
-The standard sum-check prover binds one variable per round to a random challenge from a large field. This makes the first round cheap (inputs are still “small,” e.g., 64-bit), but after that, the prover’s arithmetic immediately moves into the large field, which is much slower.
+### Why does round batching help?
 
-Our idea is simple: delay binding for a short “window” of rounds. Instead of committing to the verifier’s challenges right away, we treat the next w variables symbolically and precompute just enough to answer those w rounds in one go.
+The key insight is that this overhead is not created equal across all rounds. Two factors make round batching worthwhile despite the apparent blowup.
 
-What does that buy us?
+**Small-field arithmetic at the start.** In zkVMs, the underlying data (register values, memory contents) are small—typically 64-bit integers—while the proof system operates over a large 256-bit field. The standard prover loses this advantage after round 1: once it binds the first challenge $r_1$, all subsequent arithmetic involves large field elements, which are 10–20× slower. Round batching delays this transition. By treating the first $w$ variables symbolically, the prover performs the extra $(3/2)^w$ work using fast, native 64-bit arithmetic. The overhead is cheap precisely when the tables are largest; we only pay the large-field cost when we finally bind the window to the verifier's challenges.
 
-- Small-value speedup: In many real systems (like zkVMs), the underlying data are machine-word integers, while the proof system uses a 256-bit field. By batching the first few rounds, we can keep most of the heavy lifting in fast, native arithmetic. We only “pay” the big-field cost when we finally bind the window to the verifier’s challenges.
+**Fewer streaming passes.** For the memory-efficient streaming algorithm, recall that each pass over the original data costs $O(N) = O(2^n)$—this is the dominant cost, and it does not shrink as the protocol progresses. In contrast, the round-batching overhead applies only to the $2^{n-i}$ remaining "bound" evaluations at round $i$, which halves with each round. By batching $w$ rounds together, we reduce the number of streaming passes by a factor of $w$, while the per-pass overhead (from the larger grid) grows only as $(3/2)^w$. With the right schedule—small windows early when tables are large, larger windows later when tables have shrunk—we improve the time complexity's dependence on the polynomial degree from $O(d^2)$ to $O(d \log d)$, while staying within a sublinear memory budget.
 
-- Better streaming: If memory is tight, we reuse the same windowing trick across multiple passes. Each pass materializes the evaluations we need for its window, answers those rounds, and moves on. With the right schedule—small windows early, larger windows later—we reduce the prover’s dependence on the polynomial degree from O(d^2) to O(d log d), while staying within a sublinear memory budget.
-
-Intuitively, batching trades a bit of extra precomputation for avoiding many slow multiplications after the first round. The window size w is a knob: too small and we leave performance on the table; too large and we overcompute. In practice, a short window already makes the first (most expensive) rounds dramatically cheaper, and a growing window schedule gives a strictly better streaming prover.
-
-Takeaway: by grouping rounds and binding challenges later, we keep the prover in its “fast lane” longer and shrink the overall runtime—both in the common small-value case and in streaming regimes.
+**Choosing the window size.** The window size $w$ is a tunable parameter: too small and we leave performance on the table; too large and we overcompute. In practice, even a modest window of $w = 3$ or $4$ rounds yields significant speedups, since it targets the most expensive early rounds where the tables are largest and the arithmetic is cheapest.
 
 ## Conclusion
 
-This blog post describes a recent result that achieves a better balance of time vs. space usage
-for the sum-check protocol. In combination with many other techniques for sum-check (prefix-suffix, etc.)
-we are now closer than ever to having practical, ubiquitous verifiable computation become a reality.
+The sum-check protocol has become the workhorse of modern proof systems, powering everything from zkVMs to verifiable machine learning. In this post, we traced the evolution of sum-check proving algorithms: from the classic linear-time prover that trades memory for speed, to the streaming algorithm that sacrifices time for a minimal memory footprint. Both approaches share a common limitation—they process rounds sequentially, binding each challenge before moving to the next.
 
+Round batching breaks this sequential dependency. By treating multiple variables symbolically and computing a higher-dimensional polynomial upfront, the prover can answer several rounds at once. This simple idea yields two practical wins: it keeps arithmetic in fast, small-field operations for longer, and it reduces the number of streaming passes needed for memory-constrained settings. The technique is already being integrated into Jolt, where it targets the 70% of proving time currently spent on sum-check.
 
+As zkVMs see broader adoption—from blockchain scalability to privacy-preserving identity—every percentage point of prover speedup translates to real cost savings and expanded applicability. The gap between native execution and proof generation remains large, but techniques like round batching are steadily closing it. We are closer than ever to making verifiable computation practical and ubiquitous.
 
-[^1]: However, it is possible to interpret the coefficients of a multilinear polynomial as evaluations over the set $\{0,\infty\}^n$, under an appropriate definition of "evaluation at infinity". This is a non-standard choice with potential efficiency benefits, but we do not discuss it further here.
+<!-- 
+[^1]: However, it is possible to interpret the coefficients of a multilinear polynomial as evaluations over the set $\{0,\infty\}^n$, under an appropriate definition of "evaluation at infinity". This is a non-standard choice with potential efficiency benefits, but we do not discuss it further here. -->
 
 Citations:
 
@@ -349,77 +352,3 @@ Citations:
 <a id="ref-9"></a>[9] Bagad, S., Dao, Q., Domb, Y., & Thaler, J. (2025). Speeding Up Sum-Check Proving. Cryptology ePrint Archive, Paper 2025/1117. https://eprint.iacr.org/2025/1117
 
 <a id="ref-10"></a>[10] Baweja, A., Chiesa, A., Fedele, E., Fenzi, G., Mishra, P., Mopuri, T., & Zitek-Estrada, A. (2025). Time-Space Trade-Offs for Sumcheck. In Theory of Cryptography Conference (TCC 2025).
-
-
-
-<!-- AI generated content starts here, all commented out
-
-### **2. Background: The Magic of Multilinear Polynomials**
-
-Before we dive into the protocol itself, we need to understand its core mathematical object: the multilinear polynomial.
-
-A polynomial is simply a mathematical expression involving variables and coefficients, like $f(x) = 3x^2 + 2x - 5$. A **multilinear polynomial** is a special type where the degree of each variable in any given term is at most 1. For example, $g(X_1, X_2) = 2X_1X_2 + 3X_1 + 5X_2 + 1$ is multilinear. In contrast, $g(X_1, X_2) = X_1^2 + X_2$ is *not* multilinear because $X_1$ has a degree of 2.
-
-What makes multilinear polynomials so special for verifiable computation is their relationship with the **boolean hypercube**. A multilinear polynomial in $\ell$ variables is uniquely defined by its evaluations on the $2^\ell$ points of the boolean hypercube $\{0,1\}^\ell$. This means if you know the value of the polynomial for every binary input string of length $\ell$, you know everything about the polynomial. This property creates a powerful bridge, allowing us to take any function that operates on binary data and represent it using the rich algebraic structure of a polynomial. This is the key to encoding complex computational claims in a way that a protocol like sum-check can understand.
-
-### **3. The Sum-Check Protocol: A Detailed Walkthrough**
-
-The sum-check protocol is designed to verify a specific type of claim: that the sum of a multilinear polynomial $g(X_1, \ldots, X_\ell)$ over the entire boolean hypercube is equal to a certain value $C$.
-
-**The Claim:**
-$$ \sum_{x \in \{0,1\}^\ell} g(x) = C $$
-
-The protocol proceeds in $\ell$ rounds, systematically reducing the complexity of this claim.
-
-*   **Round 1:**
-    1.  **Prover's Move:** The Prover computes a new, single-variable polynomial $s_1(X_1)$ by summing $g$ over all variables *except* the first one:
-        $$ s_1(X_1) = \sum_{x_2, \ldots, x_\ell \in \{0,1\}^{\ell-1}} g(X_1, x_2, \ldots, x_\ell) $$
-        The Prover sends $s_1(X_1)$ to the Verifier.
-    2.  **Verifier's Check:** The Verifier performs a consistency check. If the original claim is true, then $s_1(0) + s_1(1)$ must equal $C$. If not, the Verifier rejects immediately.
-    3.  **The Challenge:** If the check passes, the Verifier picks a random value $r_1$ from a large finite field $\mathbb{F}$ and sends it to the Prover. The problem is now reduced to proving a new, smaller claim: $\sum_{x_2, \ldots, x_\ell} g(r_1, x_2, \ldots) = s_1(r_1)$.
-
-*   **Round $i$ (for $i=2, \ldots, \ell$):**
-    1.  **Prover's Move:** The Prover must now prove the claim from the previous round. It computes the next polynomial $s_i(X_i)$:
-        $$ s_i(X_i) = \sum_{x_{i+1}, \ldots, x_\ell \in \{0,1\}^{\ell-i}} g(r_1, \ldots, r_{i-1}, X_i, x_{i+1}, \ldots, x_\ell) $$
-        and sends it to the Verifier.
-    2.  **Verifier's Check:** The Verifier checks if $s_i(0) + s_i(1) = s_{i-1}(r_{i-1})$. If not, reject.
-    3.  **The Challenge:** If the check passes, the Verifier picks a new random challenge $r_i \in \mathbb{F}$ and sends it to the Prover.
-
-*   **The Final Check:**
-    After $\ell$ rounds, all variables have been bound to random challenges $(r_1, \ldots, r_\ell)$. The final claim is that $g(r_1, \ldots, r_\ell) = s_\ell(r_\ell)$. The Verifier can now check this directly by evaluating the original polynomial $g$ at this single point. If the equality holds, the Verifier accepts the entire proof.
-
-### **4. Why is this Secure? Soundness and the Schwartz-Zippel Lemma**
-
-The security of the protocol hinges on the **Schwartz-Zippel Lemma**. This fundamental result states that for two different polynomials $P_1$ and $P_2$ of total degree at most $d$, the probability that they evaluate to the same value at a random point $r$ chosen from a field $\mathbb{F}$ is at most $d/|\mathbb{F}|$.
-
-In each round of sum-check, the polynomial $s_i(X_i)$ has a degree of at most $d$ (the degree of $g$). If a cheating Prover sends an incorrect polynomial $s_i'$ instead of the true $s_i$, the difference $h(X_i) = s_i(X_i) - s_i'(X_i)$ is a non-zero polynomial of degree at most $d$. The probability that the Verifier's random challenge $r_i$ happens to be a root of this difference polynomial (i.e., $h(r_i) = 0$, meaning $s_i(r_i) = s_i'(r_i)$) is the **per-round soundness error**, which is at most $d/|\mathbb{F}|$.
-
-Since the field $\mathbb{F}$ is typically astronomically large (e.g., $|\mathbb{F}| \approx 2^{256}$), this probability is negligible. An error in any single round will, with overwhelming probability, be caught and propagated, causing the final check to fail.
-
-### **5. The Prover's Dilemma: Classical Proving Algorithms**
-
-While the Verifier's work is minimal, the Prover's task of computing the $s_i$ polynomials is the real bottleneck.
-
-*   **Algorithm 1: The Fast but Memory-Hungry Prover (Linear-Time, Linear-Space)**
-    *   **How it works:** It computes the full table of $2^\ell$ evaluations of $g$. In round 1, it sums these values to get $s_1$. For round 2, it uses the random challenge $r_1$ to compute a new, smaller table of $2^{\ell-1}$ evaluations of $g(r_1, \ldots)$ and caches it. This halving process continues.
-    *   **Cost Analysis:**
-        *   **Time:** The work is dominated by the first round. The total time is $\sum_{i=0}^{\ell-1} O(2^{\ell-i}) = O(2^\ell + 2^{\ell-1} + \dots) = O(2^\ell) = O(M)$.
-        *   **Space:** It must store the largest intermediate table, which requires $O(2^{\ell-1}) = O(M)$ memory.
-
-*   **Algorithm 2: The Memory-Frugal but Slow Prover (Quasilinear-Time, Log-Space)**
-    *   **How it works:** To save memory, it recomputes values from scratch every round. To compute $s_i(u)$, it iterates through all $2^{\ell-i}$ inputs for the remaining variables, re-evaluating $g(r_1, \ldots, r_{i-1}, u, \ldots)$ each time.
-    *   **Cost Analysis:**
-        *   **Time:** In each of the $\ell$ rounds, it does work proportional to $M$. The total time is roughly $O(\ell \cdot 2^\ell) = O(M \log M)$.
-        *   **Space:** It only needs to store the random challenges, requiring just $O(\ell) = O(\log M)$ memory.
-
-### **6. Our New Technique: Round-Batching**
-
-Our recent work introduces **round-batching**, a technique that provides a much better middle ground. The core idea is to delay the binding of random challenges. Instead of processing one round at a time, the Prover handles a "window" of $\omega$ rounds at once, treating the challenges $(X_i, \ldots, X_{i+\omega-1})$ symbolically.
-
-*   **Benefit 1: The Small-Value Optimization**
-    *   In many real-world applications (like zkVMs), the underlying data consists of "small" values (e.g., 64-bit integers), while the cryptography requires a "large" field (e.g., 256-bit numbers). Arithmetic on small numbers is dramatically faster. The linear-time prover loses this advantage after round 1, as the random challenge $r_1$ is a large field element. By batching the first few, most expensive rounds, our prover can structure its computation to continue using fast, native CPU arithmetic on small values for the bulk of its work.
-
-*   **Benefit 2: A Better Streaming Algorithm**
-    *   By applying round-batching iteratively with a clever schedule (small windows early, large windows late), we can create a superior streaming algorithm. This evaluation-basis approach improves the time complexity's dependence on the polynomial degree $d$ from $O(d^2)$ to $O(d \log d)$, a significant asymptotic and practical improvement for the high-degree polynomials common in modern proof systems.
-
- -->
