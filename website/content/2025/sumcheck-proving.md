@@ -38,10 +38,12 @@ We increasingly rely on computational results that we cannot feasibly verify our
 
 Cryptographic proof systems solve this dilemma. Such protocols let an untrusted prover, who possesses some private data, convince a verifier that the data satisfies a public property. For example, this could include proving that you are over 18 or that your account has sufficient balance, without revealing anything else such as your full date of birth, or your financial history. Furthermore, the proofs or certificates produced by such systems are relatively short, and can be verified in a matter of milliseconds, rather than the potential hours or days required to re-execute the computation. This saving further compounds if there are _many_ parties that need to verify the result.
 
-Over the past decade, cryptographic proof systems have matured from theoretical curiosities into practical tools used for a variety of applications, including age verification [1] and blockchain scalability [2]. To make developing proof systems for each application easier, the community is converging on a common framework: _zero-knowledge virtual machines (zkVMs)_. A zkVM is a virtual computer that can run any 
-program (compiled to a common instruction-set architecture like RISC-V) and produce a certificate proving that the execution is correct, allowing developers to write programs in high-level languages like Rust or Python, compile them to RISC-V, and prove their execution correctness, all without needing deep cryptographic expertise. As these systems see wider adoption, the research focus has shifted to optimizing their underlying efficiency.
+Over the past decade, cryptographic proof systems have matured from theoretical curiosities into practical tools used for a variety of applications, including age verification [1] and blockchain scalability [2]. To make developing proof systems for each application easier, the community is converging on a common framework: _zero-knowledge virtual machines (zkVMs)_.
 
-State-of-the-art zkVMs, such as Jolt [3], derive their performance from a classical protocol from 1992: the sum-check protocol [4]. In fact, sum-check is so ubiquitous in Jolt that it has become a bottleneck, taking up about 70% of the total proving time for proving large programs. In this blog post, I will introduce the sum-check protocol, detail well-known algorithms for its prover, and present a new technique that speeds up the prover in settings relevant to zkVMs.
+A zkVM is a virtual computer that can run any 
+program (compiled to a common instruction-set architecture like RISC-V) and produce a certificate proving that the execution is correct. This allows developers to write programs in high-level languages like Rust or Python, compile them to RISC-V, and prove their execution correctness, all without needing deep cryptographic expertise. As these systems see wider adoption, prover efficiency becomes paramount: even for the fastest zkVMs, generating a proof is still 50,000 to 100,000 times slower than running the computation natively. Teams across academia and industry are racing to close this gap.
+
+Many state-of-the-art zkVMs, such as Jolt [3], owes much of its performance to a classical protocol from 1992: the sum-check protocol [4]. But sum-check's very success has made it a bottleneck—in Jolt, it consumes about 70% of the total proving time for large programs. In this blog post, I will introduce the sum-check protocol, detail well-known algorithms for its prover, and present a new technique that speeds up the prover in settings relevant to zkVMs, which I am currently integrating into Jolt.
 
 ## Sum-Check Protocol Overview
 
@@ -96,7 +98,7 @@ that it can check directly using its oracle access to $p$.
 
 What properties does the sum-check protocol satisfy? The first is **completeness**. If the original sum claim is correct and the prover follows the rules, then every round’s check passes, and at the end we really do have $p(r_1,\dots,r_n) = c_n$, so the verifier accepts.
 
-The more interesting property is **soundness**, which is about what happens when the original claim is actually false. In that case, no matter how a (possibly malicious) prover behaves, at some round it must send a polynomial that is not the "right" one. Two different low-degree polynomials over a field can only agree on a small fraction of inputs (a fact known as the Schwartz–Zippel lemma); thus, a random challenge $r_i$ will land on a point where they differ except with probability at most $d / \lvert \mathbb{F}\rvert$. Thus, even when the claim is wrong, a cheating prover can make the verifier accept only with negligible probability.
+The more interesting property is **soundness**, which is about what happens when the original claim is actually false. In that case, no matter how a (possibly malicious) prover behaves, at some round it must send a polynomial that is not the "right" one. Two different low-degree polynomials over a field can only agree on a small fraction of inputs (a fact known as the Schwartz–Zippel lemma [5]); thus, a random challenge $r_i$ will land on a point where they differ except with probability at most $d / \lvert \mathbb{F}\rvert$. Thus, even when the claim is wrong, a cheating prover can make the verifier accept only with negligible probability.
 
 ## Brief Interlude on Multilinear Polynomials
 
@@ -181,7 +183,7 @@ where $p, q : \{0,1\}^n \to \mathbb{F}$ are given by their evaluations on the Bo
 
 ### Linear-time algorithm
 
-The first prover algorithm we consider, following Vu, Setty, Blumberg, and Walfish [5] and Thaler [6], runs in linear time in the number of summands (which is $N = 2^n$). This algorithm is key to the efficiency of sum-check, as we can prove a statement (like a batched zero-check) with only a constant-factor computational overhead.
+The first prover algorithm we consider, following Vu, Setty, Blumberg, and Walfish [6] and Thaler [7], runs in linear time in the number of summands (which is $N = 2^n$). This algorithm is key to the efficiency of sum-check, as we can prove a statement (like a batched zero-check) with only a constant-factor computational overhead.
 
 Recall that in the first round of sum-check, the prover needs to compute and send the univariate polynomial
 $$
@@ -236,7 +238,7 @@ RISC-V cycles). however, there won't be enough space to store the evaluations as
 
 ### Streaming algorithm with logarithmic space
 
-We now present another classic sum-check proving algorithm, by Cormode, Mitzenmacher, and Thaler [7], that is much more memory efficient.
+We now present another classic sum-check proving algorithm, by Cormode, Mitzenmacher, and Thaler [8], that is much more memory efficient.
 The setting is the following. Assume there is enough persistent storage (for example, on disk) to hold all evaluations of $p$ and $q$ on $\{0,1\}^n$, but not enough RAM to store the intermediate “bound” evaluation values of $p_1$, $q_1$, and so on. Alternatively, we can generate the original evaluations of $p$ and $q$ cheaply on the fly, but do not have space to cache all of the bound evaluations.
 
 In this setting, the prover will need to perform a streaming pass over the original data in order to compute the univariate polynomial $s_i(X)$ for each round $i$. Recall that this polynomial is determined by its evaluations at $u \in \{0,1,2\}$:
@@ -272,7 +274,7 @@ Both the linear-time and the CMT streaming algorithm share a common structure: t
 
 What if we could break this sequential dependency? Instead of computing just one round at a time, could the prover compute, say, rounds $1$ and $2$ simultaneously? Or any number of consecutive rounds at once?
 
-This is the idea behind **round batching**, a technique that is recently introduced in my work [8] and the work of Bajewa et al. [9]. The idea turns out to bring efficiency gains for both algorithms above, especially in the setting of proving program execution. I will first discuss the mechanics of round batching, and then discuss the benefits in more detail.
+This is the idea behind **round batching**, a technique that is recently introduced in my work [9] and the work of Bajewa et al. [10]. The idea turns out to bring efficiency gains for both algorithms above, especially in the setting of proving program execution. I will first discuss the mechanics of round batching, and then discuss the benefits in more detail.
 
 At first glance, this proposal seems impossible: the prover cannot know the claim for round 2 without knowing the challenge $r_1$ from round 1. The key observation is that the prover can compute a response that is **oblivious** to the future challenges. This is achieved by computing a _bivariate_ polynomial
 $$
@@ -336,15 +338,17 @@ Citations:
 
 <a id="ref-4"></a>[4] Lund, C., Fortnow, L., Karloff, H., & Nisan, N. (1992). Algebraic methods for interactive proof systems. Journal of the ACM, 39(4), 859–868. https://dl.acm.org/doi/10.1145/146585.146605
 
-<a id="ref-5"></a>[5] Vu, V., Setty, S., Blumberg, A. J., & Walfish, M. (2013). A Hybrid Architecture for Verifiable Computation. In Proceedings of the 2013 IEEE Symposium on Security and Privacy (SP), 223–237. IEEE.
+<a id="ref-5"></a>[5] Schwartz, J. T. (1980). Fast probabilistic algorithms for verification of polynomial identities. Journal of the ACM, 27(4), 701–717.
 
-<a id="ref-6"></a>[6] Thaler, J. (2013). Time-Optimal Interactive Proofs for Circuit Evaluation. In Advances in Cryptology – CRYPTO 2013 (LNCS 8042, pp. 71–89). Springer.
+<a id="ref-6"></a>[6] Vu, V., Setty, S., Blumberg, A. J., & Walfish, M. (2013). A Hybrid Architecture for Verifiable Computation. In Proceedings of the 2013 IEEE Symposium on Security and Privacy (SP), 223–237. IEEE.
 
-<a id="ref-7"></a>[7] Cormode, G., Mitzenmacher, M., & Thaler, J. (2012). Practical Verified Computation with Streaming Interactive Proofs. In Proceedings of the 2nd Innovations in Theoretical Computer Science Conference (ITCS 2012), 90–112. ACM.
+<a id="ref-7"></a>[7] Thaler, J. (2013). Time-Optimal Interactive Proofs for Circuit Evaluation. In Advances in Cryptology – CRYPTO 2013 (LNCS 8042, pp. 71–89). Springer.
 
-<a id="ref-8"></a>[8] Bagad, S., Dao, Q., Domb, Y., & Thaler, J. (2025). Speeding Up Sum-Check Proving. Cryptology ePrint Archive, Paper 2025/1117. https://eprint.iacr.org/2025/1117
+<a id="ref-8"></a>[8] Cormode, G., Mitzenmacher, M., & Thaler, J. (2012). Practical Verified Computation with Streaming Interactive Proofs. In Proceedings of the 2nd Innovations in Theoretical Computer Science Conference (ITCS 2012), 90–112. ACM.
 
-<a id="ref-9"></a>[9] Baweja, A., Chiesa, A., Fedele, E., Fenzi, G., Mishra, P., Mopuri, T., & Zitek-Estrada, A. (2025). Time-Space Trade-Offs for Sumcheck. In Theory of Cryptography Conference (TCC 2025).
+<a id="ref-9"></a>[9] Bagad, S., Dao, Q., Domb, Y., & Thaler, J. (2025). Speeding Up Sum-Check Proving. Cryptology ePrint Archive, Paper 2025/1117. https://eprint.iacr.org/2025/1117
+
+<a id="ref-10"></a>[10] Baweja, A., Chiesa, A., Fedele, E., Fenzi, G., Mishra, P., Mopuri, T., & Zitek-Estrada, A. (2025). Time-Space Trade-Offs for Sumcheck. In Theory of Cryptography Conference (TCC 2025).
 
 
 
