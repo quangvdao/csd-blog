@@ -2,7 +2,7 @@
 # The title of your blogpost. No sub-titles are allowed, nor are line-breaks.
 title = "Algorithms for the Sum-check Protocol"
 # Date must be written in YYYY-MM-DD format. This should be updated right before the final PR is made.
-date = 2025-11-24
+date = 2025-11-25
 
 [taxonomies]
 # Keep any areas that apply, removing ones that don't. Do not add new areas!
@@ -220,21 +220,6 @@ $$
     O(2^n + 2^{n-1} + \dots + 1) = O(2^n).
 $$
 One downside of this algorithm is the need to keep **linear** storage (for instance, starting from round $2$, where the prover needs to store $p_1$ and $q_1$). This linear-space usage may be fine for small-to-medium sum-check instances, but eventually will become a bottleneck. Concretely, this means that on consumer hardware with (say) 16GB of RAM, we can prove a few dozen millions cycles of RISC-V program execution, but not a billion cycles. As RAM is a limited resource, this limitation motivates us to look for algorithms that use fewer memory, even at the cost of some extra recomputation.
-
-<!-- 
-This first algorithm is due to vsbw13 and thaler13 (add refs to cites)
-
-Compute $s_1(X)$ from its evaluations at $0, 1, 2$ (degree-2 requires 3 evaluations) via summing over ...
-
-Then compute the bound polynomials $p, q$ at $r_1$, and recurse.
-
-Complexity analysis: $O(2^n)$ time and $O(2^n)$ space
-
-Problem: requires linear space as well. Quickly grows untenable as the number of terms grow
-(cannot prove billion-sized statements)
-
-assume the trace still fits in memory (which is the case when proving up to one hundred million
-RISC-V cycles). however, there won't be enough space to store the evaluations as in the linear-time algorithm -->
 
 ### Streaming algorithm with logarithmic space
 
