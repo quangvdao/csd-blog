@@ -36,7 +36,7 @@ committee = [
 
 We increasingly rely on computational results that we cannot feasibly verify ourselves. Such verification barriers come in two forms. First, the computation may involve private data that cannot be shared, such as financial audits, medical studies, and proprietary algorithms. Second, even when data is public, re-executing the computation may be prohibitively expensive: large scientific analyses might require days of cluster time on terabytes of data. How can we trust that such computations were performed correctly?
 
-Cryptographic proof systems solve this dilemma. Such protocols let an untrusted prover, who possesses some private data, convince a verifier that the data satisfies a public property. For example, this could include proving that you are over 18 or that your account has sufficient balance, without revealing anything else such as your full date of birth, or your financial history. Furthermore, the proofs or certificates produced by such systems are relatively short, and can be verified in a matter of milliseconds, rather than the potential hours or days required to re-execute the computation. This saving further compounds if there are _many_ parties that need to verify the result.
+Cryptographic proof systems solve this dilemma. Such protocols let an untrusted prover, who possesses some private data, convince a verifier that the data satisfies a public property. For example, this could include proving that you are over 18 or that your account has sufficient balance, without revealing any additional information, such as your full date of birth or your financial history. Furthermore, the proofs or certificates produced by such systems are relatively short, and can be verified in a matter of milliseconds, rather than the potential hours or days required to re-execute the computation. This saving further compounds if there are _many_ parties that need to verify the result.
 
 Over the past decade, cryptographic proof systems have matured from theoretical curiosities into practical tools used for a variety of applications, including age verification [1] and blockchain scalability [2]. To make developing proof systems for each application easier, the community is converging on a common framework: _zero-knowledge virtual machines (zkVMs)_.
 
@@ -187,15 +187,19 @@ Recall that in the first round of sum-check, the prover needs to compute and sen
 $$
     s_1(X) = \sum_{(x_2,\dots,x_n) \in \\{0,1\\}^{n-1}} p(X, x_2,\dots,x_n) \cdot q(X, x_2,\dots,x_n).
 $$
-Since \\( s_1(X) \\) has degree at most \\( 2 \\), it is completely determined by its evaluations on three distinct points, which we may choose to be \\( s_1(0), s_1(1) \\), and \\( s_1(2) \\). The prover can compute these in a single pass over the \\( 2^n \\) evaluations of \\( p \\) and \\( q \\). For each point \\( x' = (x_2,\dots,x_n) \\), given evaluations of \\( p \\) and \\( q \\) at \\( (0,x') \\) and \\( (1,x') \\), the prover adds the following to the running sums \\( s_1(0) \\), \\( s_1(1) \\), \\( s_1(2) \\):
+Since \\( s_1(X) \\) has degree at most \\( 2 \\), it is completely determined by its evaluations on three distinct points, which we may choose to be \\( s_1(0), s_1(1) \\), and \\( s_1(2) \\). The prover can compute these in a single pass over the \\( 2^n \\) evaluations of \\( p \\) and \\( q \\), using three accumulators (one for each of \\( s_1(0) \\), \\( s_1(1) \\), \\( s_1(2) \\)), all initialized to zero. For each point \\( x' = (x_2,\dots,x_n) \in \\{0,1\\}^{n-1} \\), the prover looks up the evaluations of \\( p \\) and \\( q \\) at \\( (0,x') \\) and \\( (1,x') \\), and adds the corresponding product to each accumulator:
 $$
     % \begin{cases}
-    p(0, x') \cdot q(0, x'),\quad
-    p(1, x') \cdot q(1, x'),\quad
-    p(2, x') \cdot q(2, x').
+    s_1(0) \mathrel{+}= p(0, x') \cdot q(0, x'),\quad
+    s_1(1) \mathrel{+}= p(1, x') \cdot q(1, x'),\quad
+    s_1(2) \mathrel{+}= p(2, x') \cdot q(2, x').
     % \end{cases}
 $$
-In the above, the last product can be computed by relying on the fact that \\( p \\) and \\( q \\) are linear in the first variable:
+In the above, we do not have explicit evaluations of \\( p \\) and \\( q \\) at \\( (2, x') \\), but we can extrapolate them from the values at \\( (0, x') \\) and \\( (1, x') \\). This relies on the fact that \\( p \\) and \\( q \\) are multilinear, meaning each has degree at most \\( 1 \\) in its first variable. In other words, for a fixed \\( x' \\), the map \\( X_1 \mapsto p(X_1, x') \\) is a degree-1 (affine) polynomial \\( a + b \cdot X_1 \\), so
+$$
+ p(2, x') = 2 \cdot p(1, x') - p(0, x'),
+$$
+and the same holds for \\( q \\). This gives us the formula
 $$
  p(2, x') \cdot q(2, x') = (2 \cdot p(1, x') - p(0, x')) \cdot (2 \cdot q(1, x') - q(0, x')).
 $$
@@ -205,16 +209,17 @@ $$
     p_{1}(x_2,\dots,x_n) := p(r_1, x_2,\dots,x_n), \quad
     q_{1}(x_2,\dots,x_n) := q(r_1, x_2,\dots,x_n)
 $$
-in order to continue the protocol on \\( n-1 \\) variables. The linear-time algorithm explicitly materializes the evaluations of \\( p_{1} \\) and \\( q_{1} \\) on \\( \\{0,1\\}^{n-1} \\) by making another pass over the original table and writing out two new vectors of evaluations, each of size \\( 2^{n-1} \\). The update formula is
+in order to continue the protocol on \\( n-1 \\) variables. The linear-time algorithm explicitly computes and stores the evaluations of \\( p_{1} \\) and \\( q_{1} \\) on all \\( 2^{n-1} \\) points of \\( \\{0,1\\}^{n-1} \\). It does so by making another pass over the original evaluation tables \\( (p(x))_{x \in \\{0,1\\}^n} \\) and \\( (q(x))_{x \in \\{0,1\\}^n} \\) and computing, for each \\( (x_2,\dots,x_n) \in \\{0,1\\}^{n-1} \\), the bound evaluations via linear interpolation:
 $$ p_{1}(x_2,\dots,x_n) = (1 - r_1) \cdot p(0, x_2,\dots,x_n) + r_1 \cdot p(1, x_2,\dots,x_n),$$
 $$q_{1}(x_2,\dots,x_n) = (1 - r_1) \cdot q(0, x_2,\dots,x_n) + r_1 \cdot q(1, x_2,\dots,x_n).$$
-
-In each subsequent round \\( i = 2, 3, \dots, n \\), the prover repeats the same pattern on these smaller vectors of evaluations to compute \\( s_i \\), then binds the next challenge \\( r_i \\) and shrinks the vectors of evaluations again, and so on.
+These new vectors of size \\( 2^{n-1} \\) serve as the "input data" for the next round: they play the same role that the original evaluation tables of \\( p \\) and \\( q \\) played in the first round, but for the reduced \\( (n{-}1) \\)-variable problem. In each subsequent round \\( i = 2, 3, \dots, n \\), the prover repeats the same pattern on these smaller vectors of evaluations to compute \\( s_i \\), then binds the next challenge \\( r_i \\) and shrinks the vectors of evaluations again, and so on.
 
 **Cost Analysis:** Given the description of the sum-check prover, it is clear that in round \\( i \\), the prover needs to perform \\( O(2^{n -i}) \\) number of field operations (additions, subtractions, and multiplications). Summing over all rounds, the total work is therefore linear in the number of summands \\( N = 2^n \\):
 $$
     O(2^n + 2^{n-1} + \dots + 1) = O(2^n).
 $$
+![Figure 1: The linear-time sum-check prover. The evaluation table halves at each round, giving O(N) total work but requiring O(N) RAM.](./fig-linear-time.png)
+
 One downside of this algorithm is the need to keep **linear** storage (for instance, starting from round \\( 2 \\), where the prover needs to store \\( p_1 \\) and \\( q_1 \\)). This linear-space usage may be fine for small-to-medium sum-check instances, but eventually will become a bottleneck. Concretely, this means that on consumer hardware with (say) 16GB of RAM, we can prove a few dozen millions cycles of RISC-V program execution, but not a billion cycles. As RAM is a limited resource, this limitation motivates us to look for algorithms that use fewer memory, even at the cost of some extra recomputation.
 
 ### Streaming algorithm with logarithmic space
@@ -233,7 +238,7 @@ $$
 $$
 and the same holds for \\( q \\).
 
-In other words, the value \\( p(r_1,\dots,r_{i-1}, u, x_{i+1},\dots,x_n) \\) is just a weighted sum of the original evaluations \\( p(y) \\). Importantly, the weight for a given \\( p(y) \\) depends only on the prefix of \\( y \\) (the first \\( i-1 \\) bits) and the target evaluation point \\( u \\).
+In other words, \\( p \\) at a partially bound point \\( (r_1,\dots,r_{i-1}, u, x_{i+1},\dots,x_n) \\) is just a weighted sum of the original evaluations \\( p(y, u, x_{i+1},\dots,x_n) \\) over all \\( y \in \\{0,1\\}^{i-1} \\). Note that here \\( y \\) is a vector of \\( i-1 \\) bits representing the prefix, and since \\( u \in \\{0,1\\} \\) and \\( (x_{i+1},\dots,x_n) \in \\{0,1\\}^{n-i} \\), each such evaluation is a value from the original evaluation tables stored on disk. The weight \\( \widetilde{eq}((r_1,\dots,r_{i-1}), y) \\) depends only on the prefix \\( y \\) and the challenges so far.
 
 This observation translates directly into a streaming algorithm. To compute the three required values \\( s_i(0), s_i(1), s_i(2) \\) for round \\( i \\), the prover can do the following:
 1.  **Initialize:** Set three accumulators for \\( s_i(0), s_i(1), s_i(2) \\) to zero.
@@ -246,6 +251,8 @@ This method never stores any intermediate "bound" tables. Instead, every round r
 **Cost Analysis:**
 *   **Time:** We iterate over the full stream of size \\( N \\) for each of the \\( n \\) rounds. The total work is \\( O(n \cdot N) = O(N \log N) \\), making this a **quasilinear-time** algorithm.
 *   **Space:** This is only \\( O(n) = O(\log N) \\) since we only need to store the \\( n \\) challenges and the three accumulators over all rounds.
+
+![Figure 2: The streaming sum-check prover. Each round re-reads the full original data from disk, but uses only O(log N) RAM.](./fig-streaming.png)
 
 This \\( O(\log N) \\)-space algorithm allows proving much larger statements than the linear-space approach, limited only by disk capacity or regeneration time rather than RAM. In practice, implementations often use a hybrid approach: stream for the first few rounds until the effective problem size shrinks enough to fit in memory (which happens before the halfway point in the protocol), then switch to the faster linear-time algorithm. However, this still leads to a large overhead compared to the linear-time algorithm, up to an order of magnitude for large instances (with \\( n \approx 30 \\)).
 
@@ -283,6 +290,8 @@ $$
 $$
     \qquad\qquad\qquad \cdot (2 \cdot q(r_1, \dots, r_{i-1}, 1, 1, x') - q(r_1, \dots, r_{i-1}, 1, 0, x')).
 $$
+
+![Figure 3: Round batching vs round-by-round. Batching w rounds into one pass trades more evaluation points for fewer streaming passes.](./fig-round-batching.png)
 
 **The apparent cost.** At first glance, round batching seems to be strictly slower. In the round-by-round sum-check algorithms (whether linear-time or streaming), we only need to compute \\( 3 \\) evaluations of a quadratic polynomial every round (or \\( d+1 \\) evaluations for a general sum-check instance over a degree-\\( d \\) product of multilinears). With round batching of window \\( w \\), we need to compute \\( 3^w \\) (or \\( (d+1)^w \\) in the general case) evaluations over the \\( w \\) rounds. If we had computed round-by-round evaluations instead, this number is only \\( w \cdot (d+1) \\). The gap between \\( (d+1)^w \\) and \\( w \cdot (d+1) \\) grows very quickly - for instance, with \\( d = 2 \\) and \\( w = 3 \\), we are computing **three** times as many evaluations by batching three rounds together. Why do we even bother to explore this approach?
 
