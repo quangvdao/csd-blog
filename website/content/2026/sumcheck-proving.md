@@ -34,7 +34,9 @@ committee = [
 
 ## How to Verify Private (or Expensive) Computations
 
-We increasingly rely on computational results we cannot feasibly verify ourselves. In many cases, the computation involves private data that cannot be shared, such as financial audits, medical studies, or proprietary algorithms, making it impossible for other parties to re-run. In other cases, the data is public but re-executing the computation is prohibitively expensive: large scientific analyses might require days of cluster time on terabytes of data. How can we trust that such computations were performed correctly?
+Suppose a hospital runs a statistical analysis over millions of patient records to determine whether a drug is effective. The computation takes days of cluster time, and the raw data cannot be shared due to privacy regulations. A regulatory agency needs to trust the result—but cannot re-run the computation or inspect the data. How can they be confident the analysis was performed correctly?
+
+This is an instance of a broader challenge: we increasingly rely on computational results we cannot feasibly re-check. Sometimes the data is private, so other parties cannot re-run the computation at all. Other times the data is public but the computation is simply too expensive to repeat.
 
 Cryptographic proof systems address this dilemma. They let an untrusted prover convince a verifier that some private data satisfies a public statement. For instance, you can prove that you are over 18 or that your account has sufficient balance without revealing your birthdate or financial history. Proofs are short and fast to verify—milliseconds rather than hours or days—so the savings compound when _many_ parties need to check the same result.
 
@@ -42,19 +44,19 @@ Over the past decade, cryptographic proof systems have matured from theoretical 
 
 A zkVM is a virtual computer that can run a program (compiled to a common instruction-set architecture like RISC-V) and produce a certificate proving that the execution was correct. This lets developers write programs in high-level languages like Rust or Python, compile them to RISC-V, and generate proofs without needing deep cryptographic expertise. As these systems see wider adoption, prover efficiency becomes paramount: even for the fastest zkVMs, generating a proof is still about 50,000 times slower than running the computation natively. Teams across academia and industry are racing to close this gap.
 
-Many state-of-the-art zkVMs, such as Jolt [3], owe much of their performance to a classical protocol from 1992: the sum-check protocol [4]. But sum-check's very success has made it a bottleneck—in Jolt, it consumes about 70% of the total proving time for large programs. In this blog post, I will introduce the sum-check protocol, detail well-known algorithms for its prover, and present a new technique that speeds up the prover in settings relevant to zkVMs, which I am currently integrating into Jolt.
+Many state-of-the-art zkVMs, such as Jolt [3], owe much of their performance to a classical protocol from 1992: the sum-check protocol [4]. But sum-check's very success has made it a bottleneck—in Jolt, it consumes about 70% of the total proving time for large programs. In this blog post, I will introduce the sum-check protocol, detail well-known algorithms for its prover, and present a new technique that speeds up the prover in settings relevant to zkVMs. These optimizations have been integrated into Jolt [9].
 
 ## Sum-Check Protocol Overview
 
 The sum-check protocol is an interactive proof that allows an untrusted prover to convince a computationally limited verifier of the value of a very large sum. Informally, the verifier wants to check the sum of a multivariate polynomial over a large product domain, but would like to avoid explicitly adding up all of the terms.
 
-Formally, we fix a finite field \\( \mathbb{F} \\) and a multivariate polynomial \\( p(X_1, \dots, X_n) \in \mathbb{F}[X_1,\dots, X_n] \\),
+Formally, we fix a finite field \\( \mathbb{F} \\) (a number system with addition, subtraction, multiplication, and division, but only finitely many elements) and a multivariate polynomial \\( p(X_1, \dots, X_n) \in \mathbb{F}[X_1,\dots, X_n] \\),
 of degree bounded by \\( d \\) in each variable. The sum-check claim is then
 $$ \sum_{x_1 \in H_1, \dots, x_n \in H_n} p(x_1,\dots,x_n) = c, $$
 for some evaluation domains \\( H_1, \dots, H_n \subseteq \mathbb{F} \\) and a claimed value \\( c \in \mathbb{F} \\).
 In most applications, and for the remainder of this blog post, we restrict to the _Boolean hypercube_, which is the domain \\( H_1 = \dots = H_n = \\{0,1\\} \\).
 
-The verifier knows \\( p \\), or at least has oracle access to evaluations of \\( p \\) at points of its choice, but wants to use this query access as little as possible. Naively, the verifier could evaluate \\( p \\) on all \\( 2^n \\) points of \\( \\{0,1\\}^n \\) and sum the results, which takes work on the order of \\( O(2^n) \\). The key idea of sum-check is that, by interacting with an untrusted prover who supplies additional "auxiliary" polynomials, the verifier can reduce the work of checking the original claim to checking a related claim about \\( p \\) at a single randomly chosen point.
+The verifier knows \\( p \\), or at least has query access to \\( p \\) (meaning it can ask for evaluations of \\( p \\) at chosen points), but wants to use this access as little as possible. Naively, the verifier could evaluate \\( p \\) on all \\( 2^n \\) points of \\( \\{0,1\\}^n \\) and sum the results, which takes work on the order of \\( O(2^n) \\). The key idea of sum-check is that, by interacting with an untrusted prover who supplies additional "auxiliary" polynomials, the verifier can reduce the work of checking the original claim to checking a related claim about \\( p \\) at a single randomly chosen point.
 
 In particular, the data that the prover sends at each round are the "one-dimensional" slices of this multivariate
 polynomial. In the first round, the prover sends the univariate polynomial
@@ -65,7 +67,7 @@ If the original claim is correct, then \\( s_1(X) \\) has degree at most \\( d \
 \\( s_1(0) + s_1(1) = c \\).
 The verifier checks precisely these two conditions, and rejects if either fails.
 
-If both checks pass, the verifier samples a random challenge \\( r_1 \gets \mathbb{F} \\) and sends it to the prover. This random point forces consistency: if the prover sent a fake low-degree \\( s_1 \\), then except with probability at most \\( d / \lvert \mathbb{F} \rvert \\), it will disagree with the honest slice at \\( X=r_1 \\). Over a sufficiently large field (e.g., at least 128-bit), this error probability is negligible.
+If both checks pass, the verifier samples a random challenge \\( r_1 \gets \mathbb{F} \\) and sends it to the prover. This random point forces consistency: if the prover sent an incorrect low-degree \\( s_1 \\), then except with probability at most \\( d / \lvert \mathbb{F} \rvert \\), it will disagree with the honest slice at \\( X=r_1 \\). Over a sufficiently large field (e.g., at least 128-bit), this error probability is negligible.
 
 After this first round of interaction, the prover and verifier have effectively reduced the problem to showing that
 $$
@@ -87,7 +89,7 @@ and the verifier is left with a single claim of the form
 $$
     p(r_1,\dots,r_n) = c_n
 $$
-that it can check directly using its oracle access to \\( p \\).
+that it can check directly using its query access to \\( p \\).
 
 What properties does the sum-check protocol satisfy? The first is **completeness**. If the original sum claim is correct and the prover follows the rules, then every round’s check passes, and at the end we really do have \\( p(r_1,\dots,r_n) = c_n \\), so the verifier accepts.
 
@@ -107,7 +109,7 @@ For instance,
 $$
     q(X_1, X_2, X_3) = 3X_1 X_3 + 2X_2 + 5
 $$
-is multilinear, while \\( X_1^2 + X_2 \\) is not. A key fact is that a multilinear polynomial in \\( n \\) variables is uniquely determined by its values on the \\( 2^n \\) points of the **Boolean hypercube** \\( \\{0,1\\}^n \\). This gives a natural way to encode a length-\\( 2^n \\) vector \\( \mathbf{v}=(v_0,\dots,v_{2^n-1}) \\) over \\( \mathbb{F} \\).
+is multilinear, while \\( X_1^2 + X_2 \\) is not. A key fact is that a multilinear polynomial in \\( n \\) variables is uniquely determined by its values on the \\( 2^n \\) points of the **Boolean hypercube** \\( \\{0,1\\}^n \\). This gives a natural way to encode a length-\\( 2^n \\) vector as a multilinear polynomial: the polynomial's values on the Boolean hypercube are exactly the entries of the vector.
 
 We can also make this encoding precise with a mathematical formula. Given a function \\( p : \\{0,1\\}^n \to \mathbb{F} \\) (for example, a vector of trace or constraint values indexed by
 \\( y \in \\{0,1\\}^n \\)), its **multilinear extension** is the _unique_ multilinear polynomial \\( \widetilde{p}(X_1,\dots,X_n) \\)
@@ -161,7 +163,7 @@ we check a **single** polynomial identity at a random point. Our exposition gene
 
 ## Existing Algorithms for Sum-Check
 
-We now turn to prover algorithms. We will focus on the most common setting in modern proof systems: sum-check over a low-degree function applied to one or more multilinear polynomials. This captures many real applications, including the batched zero-check above. To simplify the exposition, we further specialize to the case of a product of two multilinear polynomials
+We now turn to prover algorithms. We will focus on the most common setting in modern proof systems: sum-check over a low-degree function applied to one or more multilinear polynomials. This captures many real applications, including the batched zero-check above. In the zero-check example, the sum involved an \\( \widetilde{eq} \\) factor alongside the product \\( p \cdot q \\); in practice, the \\( \widetilde{eq} \\) factor has special structure that can be exploited separately (we return to this point in the conclusion). For now, to simplify the exposition, we specialize to the case of a product of two multilinear polynomials
 $$
     \sum_{x \in \\{0,1\\}^n} p(x) \cdot q(x) = c,
 $$
@@ -169,7 +171,7 @@ where \\( p, q : \\{0,1\\}^n \to \mathbb{F} \\) are given by their evaluations o
 
 ### Linear-time algorithm
 
-The first prover algorithm we consider, following Vu, Setty, Blumberg, and Walfish [6] and Thaler [7], runs in linear time in the number of summands \\( N = 2^n \\). This is the main setting in many proof systems: it proves statements (like a batched zero-check) with only a constant-factor overhead.
+The first prover algorithm we consider, following Vu, Setty, Blumberg, and Walfish [6] and Thaler [7], runs in linear time in the number of summands \\( N = 2^n \\). This is the main setting in many proof systems: it proves statements (like a batched zero-check) with only a constant-factor overhead relative to the input size \\( N \\).
 
 Recall that in the first round of sum-check, the prover needs to compute and send the univariate polynomial
 $$
@@ -215,15 +217,14 @@ One downside of this algorithm is the need for **linear** storage: starting from
 
 ### Streaming algorithm with logarithmic space
 
-We now present another classic sum-check proving algorithm due to Cormode, Mitzenmacher, and Thaler [8] that is far more memory efficient.
-Assume there is enough persistent storage (e.g., on disk) to hold all evaluations of \\( p \\) and \\( q \\) on \\( \\{0,1\\}^n \\), but not enough RAM to store intermediate bound tables like \\( p_1 \\), \\( q_1 \\), and so on. (Equivalently, we can generate the original evaluations cheaply on the fly but cannot afford to cache the bound evaluations.)
+For very large programs—say, a billion cycles of RISC-V execution—the linear-space algorithm simply won’t fit in memory. Can we trade extra computation time for a smaller memory footprint? Cormode, Mitzenmacher, and Thaler [8] showed that the answer is yes, with a streaming algorithm that uses only logarithmic space. The idea is to keep the original evaluations of \\( p \\) and \\( q \\) on disk (or regenerate them on the fly) and never store the intermediate bound tables \\( p_1 \\), \\( q_1 \\), and so on.
 
 In this setting, the prover makes a streaming pass over the original data in each round \\( i \\) to compute the univariate polynomial \\( s_i(X) \\). This polynomial is determined by its evaluations at \\( u \in \\{0,1,2\\} \\):
 $$
     s_i(u) = \sum_{(x_{i+1},\dots,x_n) \in \\{0,1\\}^{n-i}} p(r_1,\dots,r_{i-1}, u, x_{i+1},\dots,x_n)
                                            \cdot q(r_1,\dots,r_{i-1}, u, x_{i+1},\dots,x_n).
 $$
-By the multilinear extension formula and the equality polynomial introduced earlier, we can write these partially bound evaluations as a further sum
+The challenge is that the prover needs the partially bound evaluations \\( p(r_1,\dots,r_{i-1}, u, \dots) \\), but only has access to the _original_ evaluations \\( p(x) \\) for \\( x \in \\{0,1\\}^n \\). The key insight is that each partially bound evaluation can be recovered from the original data by taking a weighted combination, where the weights depend only on the challenges seen so far. Concretely, by the multilinear extension formula and the equality polynomial introduced earlier, we can write
 $$
     p(r_1,\dots,r_{i-1}, u, x_{i+1},\dots,x_n) = \sum_{y \in \\{0,1\\}^{i-1}} \widetilde{eq}((r_1,\dots,r_{i-1}), y) \cdot p(y, u, x_{i+1},\dots,x_n),
 $$
@@ -256,7 +257,7 @@ Both the linear-time and the CMT streaming algorithm share a common structure: t
 
 What if we could break this sequential dependency? Instead of computing just one round at a time, could the prover compute, say, rounds 1 and 2 simultaneously? Or any number of consecutive rounds at once?
 
-This is the idea behind **round batching**, introduced in my work [9] and independently in Baweja et al. [10] (with further improvements in follow-up work). It can speed up both prover algorithms above, especially in settings relevant to proving program execution.
+This is the idea behind **round batching**, introduced in my work [9] and independently in Baweja et al. [10]. The extended version of my work [9] develops this idea further alongside several complementary optimizations. Round batching can speed up both prover algorithms above, especially in settings relevant to proving program execution.
 
 At first glance, this proposal seems impossible: the prover cannot know the claim for round 2 without knowing the challenge \\( r_1 \\) from round 1. The key observation is that the prover can compute a response that is **oblivious** to the future challenges. This is achieved by computing a _bivariate_ polynomial
 $$
@@ -312,13 +313,15 @@ Since the original evaluations $$(p(x), q(x))\_{x \in \\{0,1\\}^n}$$ are small, 
 
 **Fewer streaming passes.** Recall that in the CMT streaming algorithm, the prover needs to make a pass over the original input in every round (or as long as we don't have space to store the bound evaluations). The cost of each pass is \\( O(N) = O(2^n) \\), which _does not shrink_ as the protocol progresses.
 
-Round batching reduces the number of passes over the original input: instead of one pass per round within a \\( w \\)-round window, it needs a single pass at the start of the window. If we batch starting at round \\( i \\), the added evaluation work scales as \\( (d+1)^w \cdot 2^{n-i} \\), while we save about \\( (w-1)\cdot 2^n \\) work from skipped streaming passes. With an appropriate schedule—small windows early and larger windows later—we can reduce the number of streaming passes asymptotically from \\( O(\log n) \\) to \\( O(\log \log n) \\), and see \\( 3\text{–}5\\times \\) speedups in practice.
+Round batching reduces the number of passes over the original input: instead of one pass per round within a \\( w \\)-round window, it needs a single pass at the start of the window. If we batch starting at round \\( i \\), the added evaluation work scales as \\( (d+1)^w \cdot 2^{n-i} \\), while we save about \\( (w-1)\cdot 2^n \\) work from skipped streaming passes. With an appropriate schedule—small windows early and larger windows later—we can reduce the number of streaming passes asymptotically from \\( O(\log n) \\) to \\( O(\log \log n) \\). For example, a 30-variable instance would require 30 passes with the baseline streaming algorithm; with round batching at increasing window sizes, this drops to roughly 5 passes, yielding \\( 3\text{–}5\\times \\) speedups in practice.
 
 ## Conclusion
 
 The sum-check protocol has become the workhorse of modern proof systems, powering the fastest zkVMs as well as a large number of sub-protocols such as polynomial commitment schemes [11]. In this post, we have seen the evolution of sum-check proving algorithms: from the classic linear-time prover that trades memory for speed, to the streaming algorithm that sacrifices time for a minimal memory footprint. Both approaches share a common, intuitive pattern—they process rounds sequentially, binding each challenge before moving to the next.
 
-We then saw how round batching breaks this sequential dependency, leading to two practical wins: it keeps arithmetic in fast, small-value operations for longer, and it reduces the number of streaming passes in memory-constrained settings. The technique is already being integrated into Jolt, where sum-check is a major bottleneck today.
+We then saw how round batching breaks this sequential dependency, leading to two practical wins: it keeps arithmetic in fast, small-value operations for longer, and it reduces the number of streaming passes in memory-constrained settings.
+
+Round batching is one of several complementary techniques developed in [9] and integrated into Jolt, where together they yield over \\( 10\\times \\) speedup and \\( 17\\times \\) memory reduction on a key sub-protocol. These improvements make it feasible to prove significantly larger programs on consumer hardware.
 
 As zkVMs see broader adoption—from blockchain scalability to privacy-preserving identity—every percentage point of prover speedup translates to real cost savings and expanded applicability. It is perhaps surprising that we are still extracting efficiency from sum-check; despite being over three decades old, it continues to admit optimizations tailored to modern constraints.
 
@@ -343,7 +346,7 @@ As zkVMs see broader adoption—from blockchain scalability to privacy-preservin
 
 <a id="ref-8"></a>[8] Cormode, G., Mitzenmacher, M., & Thaler, J. (2012). Practical Verified Computation with Streaming Interactive Proofs. In Proceedings of the 2nd Innovations in Theoretical Computer Science Conference (ITCS 2012), 90–112. ACM.
 
-<a id="ref-9"></a>[9] Bagad, S., Dao, Q., Domb, Y., & Thaler, J. (2025). Speeding Up Sum-Check Proving. Cryptology ePrint Archive, Paper 2025/1117. https://eprint.iacr.org/2025/1117
+<a id="ref-9"></a>[9] Dao, Q., DeStefano, Z., Bagad, S., Domb, Y., & Thaler, J. (2026). Speeding Up Sum-Check Proving (Extended Version). Cryptology ePrint Archive, Paper 2026/587. https://eprint.iacr.org/2026/587
 
 <a id="ref-10"></a>[10] Baweja, A., Chiesa, A., Fedele, E., Fenzi, G., Mishra, P., Mopuri, T., & Zitek-Estrada, A. (2025). Time-Space Trade-Offs for Sumcheck. In Theory of Cryptography Conference (TCC 2025).
 
