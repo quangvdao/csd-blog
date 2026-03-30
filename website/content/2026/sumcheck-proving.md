@@ -2,7 +2,7 @@
 # The title of your blogpost. No sub-titles are allowed, nor are line-breaks.
 title = "Algorithms for the Sum-check Protocol"
 # Date must be written in YYYY-MM-DD format. This should be updated right before the final PR is made.
-date = 2026-02-17
+date = 2026-03-30
 
 [taxonomies]
 # Keep any areas that apply, removing ones that don't. Do not add new areas!
@@ -40,11 +40,12 @@ This is an instance of a broader challenge: we increasingly rely on computationa
 
 Cryptographic proof systems address this dilemma. They let an untrusted prover convince a verifier that some private data satisfies a public statement. For instance, you can prove that you are over 18 or that your account has sufficient balance without revealing your birthdate or financial history. Proofs are short and fast to verify—milliseconds rather than hours or days—so the savings compound when _many_ parties need to check the same result.
 
-Over the past decade, cryptographic proof systems have matured from theoretical curiosities into practical tools used for a variety of applications, including age verification [1] and blockchain scalability [2]. To make developing proof systems for each application easier, the community is converging on a common framework: _zero-knowledge virtual machines (zkVMs)_.
+Over the past decade, cryptographic proof systems have matured from theoretical curiosities into practical tools, with applications ranging from age verification [1] to blockchain scalability [2].
+However, generating a proof is still orders of magnitude slower than running the computation natively, making prover efficiency a central challenge.
 
-A zkVM is a virtual computer that can run a program (compiled to a common instruction-set architecture like RISC-V) and produce a certificate proving that the execution was correct. This lets developers write programs in high-level languages like Rust or Python, compile them to RISC-V, and generate proofs without needing deep cryptographic expertise. As these systems see wider adoption, prover efficiency becomes paramount: even for the fastest zkVMs, generating a proof is still about 50,000 times slower than running the computation natively. Teams across academia and industry are racing to close this gap.
-
-Many state-of-the-art zkVMs, such as Jolt [3], owe much of their performance to a classical protocol from 1992: the sum-check protocol [4]. But sum-check's very success has made it a bottleneck—in Jolt, it consumes about 70% of the total proving time for large programs. In this blog post, I will introduce the sum-check protocol, detail well-known algorithms for its prover, and present a new technique that speeds up the prover in settings relevant to zkVMs. These optimizations have been integrated into Jolt [9].
+Many state-of-the-art proof systems owe much of their performance to a classical protocol from 1992: the sum-check protocol [4].
+Sum-check's very success, however, has made it a bottleneck: it often consumes the majority of the total proving time.
+In this blog post, I will introduce the sum-check protocol, detail well-known algorithms for its prover, and present a new technique that speeds up the prover in practical settings [9].
 
 ## Sum-Check Protocol Overview
 
@@ -123,9 +124,19 @@ $$
 $$
 You can think of \\( \widetilde{eq} \\) as an indicator for equality on the Boolean hypercube: for any \\( \vec{x}, \vec{y} \in \\{0,1\\}^n \\), \\( \widetilde{eq}(\vec{x}, \vec{y}) = 1 \\) if \\( \vec{x} = \vec{y} \\) and \\( 0 \\) otherwise. Plugging this into the formula above, each term in the sum "picks out" \\( p(y) \\) at a single Boolean point.
 
-As a small example, the 2-variate multilinear extension is given by
-$$ \begin{aligned} p(X_1, X_2) = p(0,0) \cdot (1 - X_1)(1 - X_2) &+ p(0,1) \cdot (1 - X_1)X_2 \\\ + p(1,0) \cdot X_1(1 - X_2)& + p(1,1) \cdot X_1 X_2.
+As a concrete example, consider the vector \\( [3, 1, 4, 2] \\). We index its entries by the points of \\( \\{0,1\\}^2 \\):
+$$
+    p(0,0) = 3, \quad p(0,1) = 1, \quad p(1,0) = 4, \quad p(1,1) = 2.
+$$
+Using the formula above, the multilinear extension is
+$$ \begin{aligned} \widetilde{p}(X_1, X_2) &= 3 \cdot (1 - X_1)(1 - X_2) + 1 \cdot (1 - X_1)X_2 + 4 \cdot X_1(1 - X_2) + 2 \cdot X_1 X_2 \\\ &= 3 - 2X_2 + X_1 - X_1 X_2.
 \end{aligned}$$
+You can verify that \\( \widetilde{p} \\) recovers the original vector on Boolean inputs.
+Moreover, the sum of the vector entries equals the sum of \\( \widetilde{p} \\) over the hypercube:
+$$
+    \sum_{(x_1, x_2) \in \\{0,1\\}^2} \widetilde{p}(x_1, x_2) = 3 + 1 + 4 + 2 = 10.
+$$
+Verifying this sum is exactly a sum-check instance.
 
 ### Example: Arithmetizing a Batched Zero-Check
 
@@ -213,11 +224,11 @@ $$
   <figcaption><strong>Figure 1 (Linear-time prover).</strong> The prover computes the round polynomial \(s_i\), then binds the verifier challenge \(r_i\), halving the evaluation table each round. Total work is \(O(N)\), but it requires \(O(N)\) RAM to store bound tables.</figcaption>
 </figure>
 
-One downside of this algorithm is the need for **linear** storage: starting from round \\( 2 \\), the prover must store \\( p_1 \\) and \\( q_1 \\). This may be fine for small-to-medium instances, but it eventually becomes a bottleneck. Concretely, on consumer hardware with (say) 16GB of RAM, we can prove a few dozen million cycles of RISC-V execution, but not a billion. This motivates algorithms that use less memory, even at the cost of extra computation.
+One downside of this algorithm is the need for **linear** storage: starting from round \\( 2 \\), the prover must store \\( p_1 \\) and \\( q_1 \\). This may be fine for small-to-medium instances, but it eventually becomes a bottleneck. Concretely, on consumer hardware with (say) 16GB of RAM, we can handle tables with a few dozen million entries, but not a billion. This motivates algorithms that use less memory, even at the cost of extra computation.
 
 ### Streaming algorithm with logarithmic space
 
-For very large programs—say, a billion cycles of RISC-V execution—the linear-space algorithm simply won’t fit in memory. Can we trade extra computation time for a smaller memory footprint? Cormode, Mitzenmacher, and Thaler [8] showed that the answer is yes, with a streaming algorithm that uses only logarithmic space. The idea is to keep the original evaluations of \\( p \\) and \\( q \\) on disk (or regenerate them on the fly) and never store the intermediate bound tables \\( p_1 \\), \\( q_1 \\), and so on.
+For very large instances, say billions of summands, the linear-space algorithm simply won’t fit in memory. Can we trade extra computation time for a smaller memory footprint? Cormode, Mitzenmacher, and Thaler [8] showed that the answer is yes, with a streaming algorithm that uses only logarithmic space. The idea is to keep the original evaluations of \\( p \\) and \\( q \\) on disk (or regenerate them on the fly) and never store the intermediate bound tables \\( p_1 \\), \\( q_1 \\), and so on.
 
 In this setting, the prover makes a streaming pass over the original data in each round \\( i \\) to compute the univariate polynomial \\( s_i(X) \\). This polynomial is determined by its evaluations at \\( u \in \\{0,1,2\\} \\):
 $$
@@ -297,7 +308,7 @@ $$
 
 The key insight is that the cost of computing evaluations is not equal across all rounds. In particular, there are two settings where round batching leads to a speedup despite the apparent extra work.
 
-**Small-field arithmetic at the start.** In zkVMs, the underlying data (register values, memory contents) are small—typically 64-bit integers—while the proof system operates over a large field (often 128-bit or 256-bit). Arithmetic with 64-bit integers is about **10–50x** faster than full field multiplication.
+**Small-field arithmetic at the start.** In many proof systems for correct program execution, the underlying data (such as register values or memory contents) are small—typically 64-bit integers—while the proof system operates over a large field (often 128-bit or 256-bit). Arithmetic with 64-bit integers is about **10–50x** faster than full field multiplication.
 
 For sum-check involving these small values, the prover enjoys a speedup in the first round, since the original evaluations
 $$ (p(x), q(x))\_{x \in \\{0,1\\}^n} $$
@@ -317,13 +328,18 @@ Round batching reduces the number of passes over the original input: instead of 
 
 ## Conclusion
 
-The sum-check protocol has become the workhorse of modern proof systems, powering the fastest zkVMs as well as a large number of sub-protocols such as polynomial commitment schemes [11]. In this post, we have seen the evolution of sum-check proving algorithms: from the classic linear-time prover that trades memory for speed, to the streaming algorithm that sacrifices time for a minimal memory footprint. Both approaches share a common, intuitive pattern—they process rounds sequentially, binding each challenge before moving to the next.
+The sum-check protocol has become the workhorse of modern proof systems, powering a wide range of protocols and sub-protocols such as polynomial commitment schemes [11].
+In this post, we have seen the evolution of sum-check proving algorithms: from the classic linear-time prover that trades memory for speed, to the streaming algorithm that sacrifices time for a minimal memory footprint.
+Both approaches share a common, intuitive pattern: they process rounds sequentially, binding each challenge before moving to the next.
 
 We then saw how round batching breaks this sequential dependency, leading to two practical wins: it keeps arithmetic in fast, small-value operations for longer, and it reduces the number of streaming passes in memory-constrained settings.
 
-Round batching is one of several complementary techniques developed in [9] and integrated into Jolt, where together they yield over \\( 10\\times \\) speedup and \\( 17\\times \\) memory reduction on a key sub-protocol. These improvements make it feasible to prove significantly larger programs on consumer hardware.
+One important application of these techniques is in _zero-knowledge virtual machines (zkVMs)_: systems that can execute a program (compiled to an instruction-set architecture like RISC-V) and produce a cryptographic proof that the execution was correct.
+Round batching is one of several complementary techniques developed in [9] and integrated into Jolt [3], a state-of-the-art zkVM, where together they yield over \\( 10\\times \\) speedup and \\( 17\\times \\) memory reduction on a key sub-protocol.
+These improvements make it feasible to prove significantly larger programs on consumer hardware.
 
-As zkVMs see broader adoption—from blockchain scalability to privacy-preserving identity—every percentage point of prover speedup translates to real cost savings and expanded applicability. It is perhaps surprising that we are still extracting efficiency from sum-check; despite being over three decades old, it continues to admit optimizations tailored to modern constraints.
+As proof systems see broader adoption, every percentage point of prover speedup translates to real cost savings and expanded applicability.
+It is perhaps surprising that we are still extracting efficiency from sum-check; despite being over three decades old, it continues to admit optimizations tailored to modern constraints.
 
 <!-- 
 [^1]: However, it is possible to interpret the coefficients of a multilinear polynomial as evaluations over the set \\( \{0,\infty\}^n \\), under an appropriate definition of "evaluation at infinity". This is a non-standard choice with potential efficiency benefits, but we do not discuss it further here. -->
