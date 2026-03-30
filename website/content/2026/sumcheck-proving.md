@@ -142,35 +142,65 @@ Verifying this sum is exactly a sum-check instance.
 
 Now that we have seen multilinear polynomials, let's see how they allow us to turn common constraints into sum-check instances.
 
-Consider a scenario where we have two columns of data, \\( A \\) and \\( B \\), each of length \\( N=4 \\). We want to prove that the element-wise product of these columns is zero. That is, if \\( A = [a_0, a_1, a_2, a_3] \\) and \\( B = [b_0, b_1, b_2, b_3] \\), we claim that
-$$
-    a_i \cdot b_i = 0 \quad \text{for all } i \in \\{0, 1, 2, 3\\}.
-$$
-This **batched zero-check** pattern appears everywhere in proving program execution. For example, given two input registers holding values \\( x \\) and \\( y \\), and an output register holding value \\( z \\), we can enforce that all addition instructions are correctly performed by checking that the formula
-$$
-    S_{\text{ADD}}(i) \cdot (z(i) - (x(i) + y(i))) = 0
-$$
-holds for all cycles \\( i \\). Here, \\( S_{\text{ADD}} \\) is a selector that is \\( 1 \\) if the instruction is ADD and \\( 0 \\) otherwise.
+Consider a tiny 4-cycle execution trace of a program containing only two instructions, either add two numbers (think of them as field elements) or multiply two numbers:
 
-To use sum-check, we view the indices as points on the boolean hypercube \\( \\{0,1\\}^2 \\) and the columns as evaluations of multilinear polynomials. Let \\( p(x_1, x_2) \\) and \\( q(x_1, x_2) \\) be the multilinear extensions of \\( A \\) and \\( B \\) respectively. Then our claim becomes:
-$$
-    p(x_1, x_2) \cdot q(x_1, x_2) = 0 \quad \text{for all } (x_1, x_2) \in \\{0,1\\}^2.
-$$
+| Cycle \\( i \\) | Instruction | \\( x(i) \\) | \\( y(i) \\) | \\( z(i) \\) |
+| --- | --- | --- | --- | --- |
+| 0 | ADD | 3 | 5 | 8 |
+| 1 | MUL | 2 | 6 | 12 |
+| 2 | ADD | 1 | 4 | 5 |
+| 3 | MUL | 7 | 3 | 21 |
 
-This pointwise condition can be bundled into a single sum over the hypercube. Define
+Suppose we want to check that every ADD instruction was executed correctly.
+We introduce a selector column \\( S_{\text{ADD}} = [1, 0, 1, 0] \\), where a 1 marks an ADD row, and an error column
+$$
+    E = z - (x + y) = [0, 4, 0, 11].
+$$
+The constraint we want is
+$$
+    S_{\text{ADD}}(i) \cdot E(i) = 0 \quad \text{for all } i \in \\{0, 1, 2, 3\\}.
+$$
+Concretely, the four products are
+$$
+    1 \cdot 0 = 0, \quad 0 \cdot 4 = 0, \quad 1 \cdot 0 = 0, \quad 0 \cdot 11 = 0.
+$$
+This is a **batched zero-check**: we have two columns whose element-wise product must vanish everywhere.
+
+To use sum-check, we index the four cycles by the Boolean hypercube \\( \\{0,1\\}^2 \\), say
+$$
+    (0,0) \leftrightarrow 0,\quad (0,1) \leftrightarrow 1,\quad (1,0) \leftrightarrow 2,\quad (1,1) \leftrightarrow 3.
+$$
+Let \\( p(x_1, x_2) \\) and \\( q(x_1, x_2) \\) be the multilinear extensions of \\( S_{\text{ADD}} \\) and \\( E \\) respectively.
+In this example, we can even write them down explicitly:
+$$
+    p(X_1, X_2) = 1 - X_2, \qquad q(X_1, X_2) = 4X_2 + 7X_1 X_2.
+$$
+Their product is
+$$
+    p(X_1, X_2) \cdot q(X_1, X_2) = X_2(1 - X_2)(4 + 7X_1),
+$$
+which vanishes on every Boolean point because \\( X_2(1 - X_2) = 0 \\) whenever \\( X_2 \in \\{0,1\\} \\).
+
+This pointwise condition can be bundled into a single sum over the hypercube.
+Define
 $$
     g(x_1, x_2) = p(x_1, x_2) \cdot q(x_1, x_2),
 $$
-and consider the claim that \\( g \\) vanishes on all Boolean points. This is equivalent to saying that the multilinear extension \\( \widetilde{g} \\) is identically zero on \\( \\{0,1\\}^2 \\). In other words,
+and consider the claim that \\( g \\) vanishes on all Boolean points.
+This is equivalent to saying that the multilinear extension \\( \widetilde{g} \\) is identically zero on \\( \\{0,1\\}^2 \\).
+In other words,
 $$
     \sum_{(x_1, x_2) \in \\{0,1\\}^2} \widetilde{eq}\big((X_1, X_2), (x_1, x_2)\big) \cdot p(x_1, x_2) \cdot q(x_1, x_2) = 0
 $$
-as multilinear polynomials. We reduce this to a sum-check instance by sampling a random point \\( (r_1, r_2) \in \mathbb{F}^2 \\) and checking that it vanishes at that point:
+as multilinear polynomials.
+We reduce this to a sum-check instance by sampling a random point \\( (r_1, r_2) \in \mathbb{F}^2 \\) and checking that it vanishes at that point:
 $$
     \sum_{(x_1, x_2) \in \\{0,1\\}^2} \widetilde{eq}\big((r_1, r_2), (x_1, x_2)\big) \cdot p(x_1, x_2) \cdot q(x_1, x_2) = 0.
 $$
-If this sum-check claim is correct, then the original multilinear polynomial \\( \widetilde{g} \\) is identically zero, except with negligible probability \\( 2 / \lvert \mathbb{F} \rvert \\). So, instead of checking four separate equalities \\( g(x) = 0 \\) at the cube points,
-we check a **single** polynomial identity at a random point. Our exposition generalizes easily to an arbitrary \\( 2^n \\)-batched zero-check, which is converted into a \\( n \\)-variable sum-check instance.
+If this sum-check claim is correct, then the original multilinear polynomial \\( \widetilde{g} \\) is identically zero, except with negligible probability \\( 2 / \lvert \mathbb{F} \rvert \\).
+So, instead of checking four separate products directly, we check a **single** polynomial identity at a random point.
+The same pattern scales to an arbitrary \\( 2^n \\)-row execution trace: each operation type contributes selector columns and low-degree constraint polynomials, and a full program execution becomes a large collection of such checks.
+This is the basic arithmetization step that lets proof systems handle general computation.
 
 ## Existing Algorithms for Sum-Check
 
