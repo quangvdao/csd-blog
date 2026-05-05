@@ -38,7 +38,7 @@ Suppose a hospital runs a statistical analysis over millions of patient records 
 
 This is an instance of a broader challenge: we increasingly rely on computational results we cannot feasibly re-check. Sometimes the data is private, so other parties cannot re-run the computation at all. Other times the data is public but the computation is simply too expensive to repeat.
 
-Cryptographic proof systems address this dilemma. They let an untrusted prover convince a verifier that some private data satisfies a public statement. For instance, you can prove that you are over 18 or that your account has sufficient balance without revealing your birthdate or financial history. Proofs are short and fast to verify—milliseconds rather than hours or days—so the savings compound when _many_ parties need to check the same result.
+Cryptographic zero-knowledge proof systems address this dilemma. They let an untrusted prover convince a verifier that some private data satisfies a public statement. For instance, you can prove that you are over 18 or that your account has sufficient balance without revealing your birthdate or financial history. Proofs are short and fast to verify—milliseconds rather than hours or days—so the savings compound when many parties need to check the same result.
 
 Over the past decade, cryptographic proof systems have matured from theoretical curiosities into practical tools, with applications ranging from age verification [1] to blockchain scalability [2].
 However, generating a proof is still orders of magnitude slower than running the computation natively, making prover efficiency a central challenge.
@@ -49,13 +49,15 @@ In this blog post, I will introduce the sum-check protocol, detail well-known al
 
 ## Sum-Check Protocol Overview
 
-The sum-check protocol is an interactive proof that allows an untrusted prover to convince a computationally limited verifier of the value of a very large sum. Informally, the verifier wants to check the sum of a multivariate polynomial over a large product domain, but would like to avoid explicitly adding up all of the terms.
+The sum-check protocol [4] is an interactive proof that allows an untrusted prover to convince a computationally limited verifier of the value of a very large sum. Informally, the verifier wants to check a sum of many evaluations of a multivariate polynomial over a large product domain, but would like to avoid explicitly computing all of those values.
+
+We will require two properties from the protocol: **completeness** (an honest prover always convinces the verifier) and **soundness** (a cheating prover is caught with overwhelming probability). After describing the protocol, we will verify that sum-check satisfies both.
 
 Formally, we fix a finite field \\( \mathbb{F} \\) (a number system with addition, subtraction, multiplication, and division, but only finitely many elements) and a multivariate polynomial \\( p(X_1, \dots, X_n) \in \mathbb{F}[X_1,\dots, X_n] \\),
 of degree bounded by \\( d \\) in each variable. The sum-check claim is then
 $$ \sum_{x_1 \in H_1, \dots, x_n \in H_n} p(x_1,\dots,x_n) = c, $$
 for some evaluation domains \\( H_1, \dots, H_n \subseteq \mathbb{F} \\) and a claimed value \\( c \in \mathbb{F} \\).
-In most applications, and for the remainder of this blog post, we restrict to the _Boolean hypercube_, which is the domain \\( H_1 = \dots = H_n = \\{0,1\\} \\).
+In most applications, and for the remainder of this blog post, we restrict the inputs to the _Boolean hypercube_, namely the domain \\( H_1 = \dots = H_n = \\{0,1\\} \\). The claimed value \\( c \\) remains an arbitrary element of \\( \mathbb{F} \\).
 
 The verifier knows \\( p \\), or at least has query access to \\( p \\) (meaning it can ask for evaluations of \\( p \\) at chosen points), but wants to use this access as little as possible. Naively, the verifier could evaluate \\( p \\) on all \\( 2^n \\) points of \\( \\{0,1\\}^n \\) and sum the results, which takes work on the order of \\( O(2^n) \\). The key idea of sum-check is that, by interacting with an untrusted prover who supplies additional "auxiliary" polynomials, the verifier can reduce the work of checking the original claim to checking a related claim about \\( p \\) at a single randomly chosen point.
 
@@ -68,14 +70,14 @@ If the original claim is correct, then \\( s_1(X) \\) has degree at most \\( d \
 \\( s_1(0) + s_1(1) = c \\).
 The verifier checks precisely these two conditions, and rejects if either fails.
 
-If both checks pass, the verifier samples a random challenge \\( r_1 \gets \mathbb{F} \\) and sends it to the prover. This random point forces consistency: if the prover sent an incorrect low-degree \\( s_1 \\), then except with probability at most \\( d / \lvert \mathbb{F} \rvert \\), it will disagree with the honest slice at \\( X=r_1 \\). Over a sufficiently large field (e.g., at least 128-bit), this error probability is negligible.
+If both checks pass, the verifier samples a random challenge \\( r_1 \gets \mathbb{F} \\) and sends it to the prover. This random point forces consistency: if the prover sent an incorrect low-degree \\( s_1 \\), then with high probability (at least \\( 1 - d / \lvert \mathbb{F} \rvert \\)) it disagrees with the honest slice at \\( X=r_1 \\). Over a sufficiently large field (e.g., at least 128-bit), this error probability is negligible. We discuss why this is the case under soundness below.
 
 After this first round of interaction, the prover and verifier have effectively reduced the problem to showing that
 $$
     \sum_{(x_2,\dots, x_n) \in \\{0,1\\}^{n-1}} p_1(x_2, \dots, x_n) = c_1,
 $$
 where we define \\( p_1(x_2,\dots,x_n) := p(r_1, x_2,\dots,x_n) \\) and \\( c_1 := s_1(r_1) \\).
-That is, we have "bound" the first variable to \\( r_1 \\) and now reduce to a new sum-check instance in \\( n-1 \\)
+That is, we have "bound" the first variable to \\( r_1 \\) (where "bound" here means "substituted in," not lower or upper bound) and now reduce to a new sum-check instance in \\( n-1 \\)
 variables.
 The protocol then repeats the same pattern on this new instance:
 in the second round, the prover sends a univariate polynomial
@@ -94,7 +96,7 @@ that it can check directly using its query access to \\( p \\).
 
 What properties does the sum-check protocol satisfy? The first is **completeness**. If the original sum claim is correct and the prover follows the rules, then every round’s check passes, and at the end we really do have \\( p(r_1,\dots,r_n) = c_n \\), so the verifier accepts.
 
-The more interesting property is **soundness**, which is about what happens when the original claim is false. In that case, no matter how a (possibly malicious) prover behaves, at some round it must send a polynomial that is not the "right" one. By the Schwartz–Zippel lemma [5], two different degree-\\( d \\) polynomials over a field agree on at most a \\( d / \lvert \mathbb{F}\rvert \\) fraction of points, so a random challenge \\( r_i \\) catches the lie except with that probability. With a large field, this is negligible.
+The more interesting property is **soundness**, which is about what happens when the original claim is false. In that case, no matter how a (possibly malicious) prover behaves, at some round it must send a polynomial that is not the "right" one. This is exactly the situation we previewed when introducing the random challenge \\( r_1 \\): by the Schwartz–Zippel lemma [5], two different degree-\\( d \\) polynomials over a field agree on at most a \\( d / \lvert \mathbb{F}\rvert \\) fraction of points, so a random challenge \\( r_i \\) catches the lie except with that probability. With a large field, this is negligible.
 
 ## Brief Interlude on Multilinear Polynomials
 
@@ -110,7 +112,7 @@ For instance,
 $$
     q(X_1, X_2, X_3) = 3X_1 X_3 + 2X_2 + 5
 $$
-is multilinear, while \\( X_1^2 + X_2 \\) is not. A key fact is that a multilinear polynomial in \\( n \\) variables is uniquely determined by its values on the \\( 2^n \\) points of the **Boolean hypercube** \\( \\{0,1\\}^n \\). This gives a natural way to encode a length-\\( 2^n \\) vector as a multilinear polynomial: the polynomial's values on the Boolean hypercube are exactly the entries of the vector.
+is multilinear, while \\( X_1^2 + X_2 \\) is not. A key fact is that a multilinear polynomial in \\( n \\) variables is uniquely determined by its values on the \\( 2^n \\) points of the Boolean hypercube \\( \\{0,1\\}^n \\). This gives a natural way to encode a length-\\( 2^n \\) vector as a multilinear polynomial: the polynomial's values on the Boolean hypercube are exactly the entries of the vector.
 
 We can also make this encoding precise with a mathematical formula. Given a function \\( p : \\{0,1\\}^n \to \mathbb{F} \\) (for example, a vector of trace or constraint values indexed by
 \\( y \in \\{0,1\\}^n \\)), its **multilinear extension** is the _unique_ multilinear polynomial \\( \widetilde{p}(X_1,\dots,X_n) \\)
@@ -164,13 +166,13 @@ Concretely, the four products are
 $$
     1 \cdot 0 = 0, \quad 0 \cdot 4 = 0, \quad 1 \cdot 0 = 0, \quad 0 \cdot 11 = 0.
 $$
-This is a **batched zero-check**: we have two columns whose element-wise product must vanish everywhere.
+This is a **batched zero-check**: we have two columns whose element-wise product must vanish everywhere. In a real program execution, we typically need to check that thousands or millions of such per-row products are all zero, so it is essential to verify them as a single batched check rather than one row at a time.
 
 To use sum-check, we index the four cycles by the Boolean hypercube \\( \\{0,1\\}^2 \\), say
 $$
     (0,0) \leftrightarrow 0,\quad (0,1) \leftrightarrow 1,\quad (1,0) \leftrightarrow 2,\quad (1,1) \leftrightarrow 3.
 $$
-Let \\( p(x_1, x_2) \\) and \\( q(x_1, x_2) \\) be the multilinear extensions of \\( S_{\text{ADD}} \\) and \\( E \\) respectively.
+Let \\( p(X_1, X_2) \\) and \\( q(X_1, X_2) \\) be the multilinear extensions of \\( S_{\text{ADD}} \\) and \\( E \\) respectively.
 In this example, we can even write them down explicitly:
 $$
     p(X_1, X_2) = 1 - X_2, \qquad q(X_1, X_2) = 4X_2 + 7X_1 X_2.
@@ -186,18 +188,17 @@ Define
 $$
     g(x_1, x_2) = p(x_1, x_2) \cdot q(x_1, x_2),
 $$
-and consider the claim that \\( g \\) vanishes on all Boolean points.
-This is equivalent to saying that the multilinear extension \\( \widetilde{g} \\) is identically zero on \\( \\{0,1\\}^2 \\).
-In other words,
+and we want to demonstrate that \\( g \\) is zero everywhere on the Boolean hypercube.
+Equivalently, the multilinear extension \\( \widetilde{g} \\) is the zero polynomial on \\( \\{0,1\\}^2 \\).
+This in turn is equivalent to the polynomial identity
 $$
-    \sum_{(x_1, x_2) \in \\{0,1\\}^2} \widetilde{eq}\big((X_1, X_2), (x_1, x_2)\big) \cdot p(x_1, x_2) \cdot q(x_1, x_2) = 0
+    \sum_{(x_1, x_2) \in \\{0,1\\}^2} \widetilde{eq}\big((X_1, X_2), (x_1, x_2)\big) \cdot p(x_1, x_2) \cdot q(x_1, x_2) = 0.
 $$
-as multilinear polynomials.
-We reduce this to a sum-check instance by sampling a random point \\( (r_1, r_2) \in \mathbb{F}^2 \\) and checking that it vanishes at that point:
+We reduce this identity to a sum-check instance by sampling a random point \\( (r_1, r_2) \in \mathbb{F}^2 \\) and checking that it holds at that point:
 $$
     \sum_{(x_1, x_2) \in \\{0,1\\}^2} \widetilde{eq}\big((r_1, r_2), (x_1, x_2)\big) \cdot p(x_1, x_2) \cdot q(x_1, x_2) = 0.
 $$
-If this sum-check claim is correct, then the original multilinear polynomial \\( \widetilde{g} \\) is identically zero, except with negligible probability \\( 2 / \lvert \mathbb{F} \rvert \\).
+By the Schwartz–Zippel lemma, if this sum-check claim holds for random \\( (r_1, r_2) \\), then \\( \widetilde{g} \\) is zero everywhere on \\( \\{0,1\\}^2 \\), except with negligible probability \\( 2 / \lvert \mathbb{F} \rvert \\).
 So, instead of checking four separate products directly, we check a **single** polynomial identity at a random point.
 The same pattern scales to an arbitrary \\( 2^n \\)-row execution trace: each operation type contributes selector columns and low-degree constraint polynomials, and a full program execution becomes a large collection of such checks.
 This is the basic arithmetization step that lets proof systems handle general computation.
@@ -258,7 +259,7 @@ One downside of this algorithm is the need for **linear** storage: starting from
 
 ### Streaming algorithm with logarithmic space
 
-For very large instances, say billions of summands, the linear-space algorithm simply won’t fit in memory. Can we trade extra computation time for a smaller memory footprint? Cormode, Mitzenmacher, and Thaler [8] showed that the answer is yes, with a streaming algorithm that uses only logarithmic space. The idea is to keep the original evaluations of \\( p \\) and \\( q \\) on disk (or regenerate them on the fly) and never store the intermediate bound tables \\( p_1 \\), \\( q_1 \\), and so on.
+For very large instances, say billions of summands, the linear-space algorithm simply won’t fit in memory. Can we trade extra computation time for a smaller memory footprint? Cormode, Mitzenmacher, and Thaler (CMT) [8] showed that the answer is yes, with a streaming algorithm that uses only logarithmic space. The idea is to keep the original evaluations of \\( p \\) and \\( q \\) on disk (or regenerate them on the fly) and never store the intermediate bound tables \\( p_1 \\), \\( q_1 \\), and so on.
 
 In this setting, the prover makes a streaming pass over the original data in each round \\( i \\) to compute the univariate polynomial \\( s_i(X) \\). This polynomial is determined by its evaluations at \\( u \in \\{0,1,2\\} \\):
 $$
