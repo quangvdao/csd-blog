@@ -310,19 +310,19 @@ that suffices to answer both rounds 1 and 2. Indeed, the first round polynomial 
 
 More generally, if we want to compute \\( w \\) consecutive rounds at once, starting at round \\( i \\), the prover will need to compute the \\( w \\)-variate polynomial
 $$
-    s(X_1, \dots, X_w) = \sum_{x' \in \\{0,1\\}^{n-w-i}} p(r_1, \dots, r_{i-1}, X_1, \dots, X_w, x') \cdot q(r_1, \dots, r_{i-1}, X_1, \dots, X_w, x').
+    s(X_1, \dots, X_w) = \sum_{x' \in \\{0,1\\}^{n-i-w+1}} p(r_1, \dots, r_{i-1}, X_1, \dots, X_w, x') \cdot q(r_1, \dots, r_{i-1}, X_1, \dots, X_w, x').
 $$
 Once the prover has computed this polynomial, the next \\( w \\) rounds of the protocol reduce to running sum-check on the \\( w \\)-variate polynomial \\( s \\) itself:
 $$
-\sum_{x \in \\{0,1\\}^w} s(x) = c_i,
+\sum_{x \in \\{0,1\\}^w} s(x) = c_{i-1},
 $$
-as we saw in our example above with \\( i=1 \\) and \\( w=2 \\).
+where \\( c_{i-1} \\) is the claim at the start of round \\( i \\), with \\( c_0 := c \\). This is the same reduction that we saw above for \\( i=1 \\) and \\( w=2 \\).
 
 Since \\( w \\) is often much smaller than \\( n \\), this inner sum-check is easy; the main cost is computing \\( s(X_1, \dots, X_w) \\) itself. Because \\( s \\) is **multi-quadratic** (degree at most \\( 2 \\) in each variable), it is determined by its values on the \\( \\{0,1,2\\}^w \\) grid. For instance, if \\( w = 2 \\), one evaluation (say \\( s(1,2) \\)) is
 $$
-    s(1, 2) = \sum_{x' \in \\{0,1\\}^{n-2}} p(r_1, \dots, r_{i-1}, 1, 2, x') \cdot q(r_1, \dots, r_{i-1}, 1, 2, x') $$
+    s(1, 2) = \sum_{x' \in \\{0,1\\}^{n-i-1}} p(r_1, \dots, r_{i-1}, 1, 2, x') \cdot q(r_1, \dots, r_{i-1}, 1, 2, x') $$
 $$
-    \qquad\qquad\quad = \sum_{x' \in \\{0,1\\}^{n-2}} (2 \cdot p(r_1, \dots, r_{i-1}, 1, 1, x') - p(r_1, \dots, r_{i-1}, 1, 0, x'))
+    \qquad\qquad\quad = \sum_{x' \in \\{0,1\\}^{n-i-1}} (2 \cdot p(r_1, \dots, r_{i-1}, 1, 1, x') - p(r_1, \dots, r_{i-1}, 1, 0, x'))
 $$
 $$
     \qquad\qquad\qquad \cdot (2 \cdot q(r_1, \dots, r_{i-1}, 1, 1, x') - q(r_1, \dots, r_{i-1}, 1, 0, x')).
@@ -355,7 +355,7 @@ Since the original evaluations $$(p(x), q(x))\_{x \in \\{0,1\\}^n}$$ are small, 
 
 **Fewer streaming passes.** Recall that in the CMT streaming algorithm, the prover needs to make a pass over the original input in every round (or as long as we don't have space to store the bound evaluations). The cost of each pass is \\( O(N) = O(2^n) \\), which _does not shrink_ as the protocol progresses.
 
-Round batching reduces the number of passes over the original input: instead of one pass per round within a \\( w \\)-round window, it needs a single pass at the start of the window. If we batch starting at round \\( i \\), the added evaluation work scales as \\( (d+1)^w \cdot 2^{n-i} \\), while we save about \\( (w-1)\cdot 2^n \\) work from skipped streaming passes. With an appropriate schedule—small windows early and larger windows later—we can reduce the number of streaming passes asymptotically from \\( O(\log n) \\) to \\( O(\log \log n) \\). For example, a 30-variable instance would require 30 passes with the baseline streaming algorithm; with round batching at increasing window sizes, this drops to roughly 5 passes, yielding \\( 3\text{–}5\\times \\) speedups in practice.
+Round batching reduces the number of passes over the original input: instead of one pass per round within a \\( w \\)-round window, it needs a single pass at the start of the window. If we batch starting at round \\( i \\), the added evaluation work scales as \\( (d+1)^w \cdot 2^{n-i-w+1} \\), while we save about \\( (w-1)\cdot 2^n \\) work from skipped streaming passes. With an appropriate schedule—small windows early and larger windows later—we can reduce the number of streaming passes asymptotically from \\( O(n) \\) to \\( O(\log n) \\). For example, a 30-variable instance would require 30 passes with the baseline streaming algorithm; with round batching at increasing window sizes, this drops to roughly 5 passes, yielding \\( 3\text{–}5\\times \\) speedups in practice.
 
 ## Conclusion
 
